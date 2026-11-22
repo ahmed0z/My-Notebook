@@ -70,9 +70,20 @@ using (var scope = app.Services.CreateScope()) {
                 );
                 CREATE INDEX IF NOT EXISTS ""IX_Spaces_UserId"" ON ""Spaces"" (""UserId"");
                 CREATE INDEX IF NOT EXISTS ""IX_Spaces_ParentSpaceId"" ON ""Spaces"" (""ParentSpaceId"");
+                CREATE INDEX IF NOT EXISTS ""IX_Spaces_Position"" ON ""Spaces"" (""Position"");
 
                 ALTER TABLE ""Notes"" ADD COLUMN IF NOT EXISTS ""SpaceId"" uuid NULL;
                 CREATE INDEX IF NOT EXISTS ""IX_Notes_SpaceId"" ON ""Notes"" (""SpaceId"");
+
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_Notes_Spaces_SpaceId') THEN
+                        ALTER TABLE ""Notes"" ADD CONSTRAINT ""FK_Notes_Spaces_SpaceId"" FOREIGN KEY (""SpaceId"") REFERENCES ""Spaces"" (""Id"") ON DELETE SET NULL;
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_Notes_Users_UserId') THEN
+                        ALTER TABLE ""Notes"" ADD CONSTRAINT ""FK_Notes_Users_UserId"" FOREIGN KEY (""UserId"") REFERENCES ""Users"" (""Id"") ON DELETE CASCADE;
+                    END IF;
+                END $$;
 
                 CREATE TABLE IF NOT EXISTS ""NoteLinks"" (
                     ""Id"" uuid NOT NULL,
