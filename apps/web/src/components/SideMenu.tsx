@@ -149,9 +149,10 @@ export const SideMenu: React.FC<SideMenuProps> = ({
             <p className="text-xs font-semibold text-stone-800 dark:text-stone-200 truncate">
               {username || 'NoteBook User'}
             </p>
-            <p className="text-[11px] text-stone-400 dark:text-stone-500 truncate">
-              Personal Workspace
-            </p>
+            <div className="flex items-center justify-between gap-1 text-[11px] text-stone-400 dark:text-stone-500">
+              <span className="truncate">Personal Workspace</span>
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 font-medium shrink-0">v0.0.1-beta</span>
+            </div>
           </div>
         </div>
       </aside>

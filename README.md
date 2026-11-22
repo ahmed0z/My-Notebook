@@ -1,7 +1,12 @@
 # NoteBook 📓
 
+[![Version](https://img.shields.io/badge/version-0.0.1--beta-blue.svg)](https://github.com/ahmed0z/My-Notebook/releases)
+[![Build & Tests](https://img.shields.io/badge/tests-84%20passed%20%7C%20122%20passed-brightgreen.svg)](https://github.com/ahmed0z/My-Notebook)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A modern, fast, and elegant personal knowledge base and block-based note-taking application inspired by Notion and Obsidian, built with **.NET 8**, **React 18**, **TypeScript**, **PostgreSQL**, and **Material Design 3**.
 
+**Release Version:** `0.0.1-beta`  
 🌐 **Live Demo:** [https://mynotebook.runasp.net/](https://mynotebook.runasp.net/)
 
 ---

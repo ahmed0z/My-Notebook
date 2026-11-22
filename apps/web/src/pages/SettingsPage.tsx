@@ -635,6 +635,15 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             </div>
           </div>
         </section>
+
+        {/* App Version & Info */}
+        <div className="pt-2 pb-6 text-center text-xs text-stone-400 dark:text-stone-500 flex items-center justify-center gap-2">
+          <span>NoteBook</span>
+          <span>•</span>
+          <span className="font-mono text-[11px] px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 border border-stone-200 dark:border-stone-700 font-medium">
+            v0.0.1-beta
+          </span>
+        </div>
       </main>
     </div>
   );
