@@ -11,6 +11,7 @@ namespace NoteBook.Api.Services;
 
 public class AuthService : IAuthService {
     public static readonly Guid SingletonUserId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+    private static readonly System.ComponentModel.DataAnnotations.EmailAddressAttribute EmailValidator = new();
 
     private readonly AppDbContext _context;
     private readonly IConfiguration _configuration;
@@ -197,7 +198,7 @@ public class AuthService : IAuthService {
     private static bool IsValidEmail(string email) {
         if (string.IsNullOrWhiteSpace(email)) return false;
         var trimmed = email.Trim();
-        if (!new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(trimmed)) return false;
+        if (!EmailValidator.IsValid(trimmed)) return false;
         var atIndex = trimmed.IndexOf('@');
         if (atIndex <= 0 || atIndex >= trimmed.Length - 1) return false;
         var domain = trimmed[(atIndex + 1)..];
