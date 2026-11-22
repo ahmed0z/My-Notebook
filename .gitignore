@@ -1,0 +1,9 @@
+.superpowers/
+bin/
+obj/
+node_modules/
+dist/
+publish/
+publish-*/
+*.zip
+*.log
