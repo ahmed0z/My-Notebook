@@ -10,3 +10,5 @@ public record ForgotPasswordRequest(string Email);
 public record ForgotPasswordResponse(bool Success, string Message, string? DevCode = null);
 public record ResetPasswordWithCodeRequest(string Email, string Code, string NewPassword);
 public record UpdateEmailRequest(string Email);
+public record RegisterRequest(string Username, string Email, string Password);
+public record RegisterResult(bool Success, AuthResponse? Response = null, string? Error = null, bool IsConflict = false);

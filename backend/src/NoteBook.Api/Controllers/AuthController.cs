@@ -49,6 +49,20 @@ public class AuthController : ControllerBase {
         return Ok(result);
     }
 
+    [HttpPost("register")]
+    [AllowAnonymous]
+    public async Task<IActionResult> Register([FromBody] RegisterRequest request) {
+        var result = await _authService.RegisterAsync(request);
+        if (!result.Success) {
+            if (result.IsConflict) {
+                return Conflict(new { error = result.Error });
+            }
+            return BadRequest(new { error = result.Error });
+        }
+
+        return Ok(result.Response);
+    }
+
     [HttpPut("password")]
     [Authorize]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request) {
