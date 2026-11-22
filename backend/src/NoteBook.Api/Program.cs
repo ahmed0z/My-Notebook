@@ -49,6 +49,7 @@ using (var scope = app.Services.CreateScope()) {
         if (db.Database.IsRelational()) {
             db.Database.ExecuteSqlRaw(@"
                 ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""Email"" character varying(200) NULL;
+                ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""AvatarUrl"" character varying(500) NULL;
                 ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""ResetCode"" character varying(50) NULL;
                 ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""ResetCodeExpiresAt"" timestamp with time zone NULL;
                 CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Users_Email"" ON ""Users"" (""Email"") WHERE ""Email"" IS NOT NULL;

@@ -14,6 +14,34 @@ public class SmtpEmailSender : IEmailSender {
     }
 
     public async Task<bool> SendPasswordResetEmailAsync(string toEmail, string resetCode, string username) {
+        var resendKey = _configuration["Resend:ApiKey"] ?? Environment.GetEnvironmentVariable("RESEND_API_KEY");
+        if (!string.IsNullOrWhiteSpace(resendKey)) {
+            try {
+                using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+                httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", resendKey.Trim());
+                var resendFrom = _configuration["Resend:FromEmail"] ?? "NoteBook Security <onboarding@resend.dev>";
+                var htmlBody = GenerateHtmlBody(resetCode, username);
+                var plainTextBody = GeneratePlainTextBody(resetCode, username);
+                var payload = new {
+                    from = resendFrom,
+                    to = new[] { toEmail },
+                    subject = "Your NoteBook Password Reset Code",
+                    html = htmlBody,
+                    text = plainTextBody
+                };
+                var content = new StringContent(System.Text.Json.JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+                var response = await httpClient.PostAsync("https://api.resend.com/emails", content);
+                if (response.IsSuccessStatusCode) {
+                    _logger.LogInformation("Password reset email sent to {ToEmail} via Resend API", toEmail);
+                    return true;
+                }
+                var err = await response.Content.ReadAsStringAsync();
+                _logger.LogWarning("Resend API returned status {Status}: {Body}", response.StatusCode, err);
+            } catch (Exception ex) {
+                _logger.LogWarning(ex, "Failed to send email via Resend API to {ToEmail}", toEmail);
+            }
+        }
+
         var host = _configuration["Smtp:Host"] ?? Environment.GetEnvironmentVariable("SMTP_HOST");
         var portStr = _configuration["Smtp:Port"] ?? Environment.GetEnvironmentVariable("SMTP_PORT") ?? "587";
         var port = int.TryParse(portStr, out var p) ? p : 587;

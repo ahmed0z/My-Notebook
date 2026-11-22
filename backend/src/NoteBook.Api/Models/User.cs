@@ -4,6 +4,7 @@ public class User {
     public Guid Id { get; set; }
     public string Username { get; set; } = string.Empty;
     public string? Email { get; set; }
+    public string? AvatarUrl { get; set; }
     public string? ResetCode { get; set; }
     public DateTime? ResetCodeExpiresAt { get; set; }
     public string PasswordHash { get; set; } = string.Empty;

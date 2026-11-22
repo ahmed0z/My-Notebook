@@ -1,7 +1,9 @@
 export interface AuthResponseDto {
   token: string;
   username: string;
-  isInitialSetup: boolean;
+  email?: string | null;
+  avatarUrl?: string | null;
+  isInitialSetup?: boolean;
 }
 
 export interface SetupRequestDto {
@@ -20,3 +22,16 @@ export interface RegisterRequest {
   password: string;
 }
 
+export interface UserProfileDto {
+  id: string;
+  username: string;
+  email?: string | null;
+  avatarUrl?: string | null;
+  createdAt: string;
+}
+
+export interface UpdateProfileRequestDto {
+  username?: string;
+  avatarUrl?: string | null;
+  email?: string | null;
+}

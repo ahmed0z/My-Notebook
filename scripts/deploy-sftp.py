@@ -42,7 +42,17 @@ def upload_dir(sftp, local_dir, remote_dir):
         else:
             size_kb = os.path.getsize(local_path) / 1024
             print(f"Uploading {item} ({size_kb:.1f} KB) -> {remote_path}")
-            sftp.put(local_path, remote_path)
+            retries = 6
+            while retries > 0:
+                try:
+                    sftp.put(local_path, remote_path)
+                    break
+                except IOError as e:
+                    retries -= 1
+                    if retries == 0:
+                        raise
+                    print(f"File locked or busy ({e}), waiting 4s... (retries left: {retries})")
+                    time.sleep(4)
 
 def main():
     print(f"Connecting to {HOST}:{PORT} as {USER}...")
@@ -64,7 +74,14 @@ def main():
         print("Putting app offline temporarily for update...")
         with sftp.file(offline_file, "w") as f:
             f.write("<!doctype html><html><body>Updating NoteBook application...</body></html>")
-        time.sleep(2)
+        # Trigger IIS to detect app_offline.htm and unload the app pool
+        try:
+            import urllib.request
+            urllib.request.urlopen("https://mynotebook.runasp.net/", timeout=5)
+        except Exception:
+            pass
+        print("Waiting 6s for IIS to unload binaries and release locks...")
+        time.sleep(6)
     except Exception as e:
         print(f"Note: Could not create app_offline.htm: {e}")
 

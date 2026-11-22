@@ -50,7 +50,7 @@ public class AuthService : IAuthService {
         }
 
         var token = GenerateJwtToken(user);
-        return new AuthResponse(token, user.Username, user.Email);
+        return new AuthResponse(token, user.Username, user.Email, user.AvatarUrl);
     }
 
     public async Task<AuthResponse?> LoginAsync(LoginRequest request) {
@@ -68,7 +68,7 @@ public class AuthService : IAuthService {
         }
 
         var token = GenerateJwtToken(user);
-        return new AuthResponse(token, user.Username, user.Email);
+        return new AuthResponse(token, user.Username, user.Email, user.AvatarUrl);
     }
 
     public async Task<bool> ChangePasswordAsync(Guid userId, string currentPassword, string newPassword) {
@@ -128,7 +128,7 @@ public class AuthService : IAuthService {
         await _context.SaveChangesAsync();
 
         var token = GenerateJwtToken(user);
-        return new AuthResponse(token, user.Username, user.Email);
+        return new AuthResponse(token, user.Username, user.Email, user.AvatarUrl);
     }
 
     public async Task<RegisterResult> RegisterAsync(RegisterRequest request) {
@@ -192,7 +192,7 @@ public class AuthService : IAuthService {
         }
 
         var token = GenerateJwtToken(user);
-        return new RegisterResult(true, new AuthResponse(token, user.Username, user.Email));
+        return new RegisterResult(true, new AuthResponse(token, user.Username, user.Email, user.AvatarUrl));
     }
 
     private static bool IsValidEmail(string email) {
@@ -220,10 +220,28 @@ public class AuthService : IAuthService {
 
         await _emailSender.SendPasswordResetEmailAsync(user.Email!, code, user.Username);
 
-        var enableDevCode = _configuration["EnableDevResetCodes"] == "true" 
-            || (string.IsNullOrWhiteSpace(_configuration["Smtp:Host"]) && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("SMTP_HOST")));
+        return new ForgotPasswordResponse(true, "If an account with that email exists, a reset code has been sent.");
+    }
 
-        return new ForgotPasswordResponse(true, "If an account with that email exists, a reset code has been sent.", enableDevCode ? code : null);
+    public async Task<ForgotPasswordResponse> RequestPasswordCodeForUserAsync(Guid userId) {
+        var user = await _context.Users.FindAsync(userId);
+        if (user == null) {
+            return new ForgotPasswordResponse(false, "User not found.");
+        }
+
+        if (string.IsNullOrWhiteSpace(user.Email)) {
+            return new ForgotPasswordResponse(false, "Please set an email address on your profile first to receive verification codes.");
+        }
+
+        var code = System.Security.Cryptography.RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
+        user.ResetCode = code;
+        user.ResetCodeExpiresAt = DateTime.UtcNow.AddMinutes(15);
+        user.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        await _emailSender.SendPasswordResetEmailAsync(user.Email, code, user.Username);
+
+        return new ForgotPasswordResponse(true, $"A 6-digit verification code has been sent to {user.Email}.");
     }
 
     public async Task<bool> ResetPasswordWithCodeAsync(string email, string code, string newPassword) {
@@ -261,6 +279,57 @@ public class AuthService : IAuthService {
         user.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
         return true;
+    }
+
+    public async Task<UserProfileResponse?> GetProfileAsync(Guid userId) {
+        var user = await _context.Users.FindAsync(userId);
+        if (user == null) return null;
+        return new UserProfileResponse(user.Id, user.Username, user.Email, user.AvatarUrl, user.CreatedAt);
+    }
+
+    public async Task<UpdateProfileResult> UpdateProfileAsync(Guid userId, UpdateProfileRequest request) {
+        var user = await _context.Users.FindAsync(userId);
+        if (user == null) return new UpdateProfileResult(false, null, "User not found");
+
+        if (!string.IsNullOrWhiteSpace(request.Username)) {
+            var trimmedUsername = request.Username.Trim();
+            if (trimmedUsername.Length < 3) {
+                return new UpdateProfileResult(false, null, "Username must be at least 3 characters");
+            }
+            if (!string.Equals(user.Username, trimmedUsername, StringComparison.OrdinalIgnoreCase)) {
+                var taken = await _context.Users.AnyAsync(u => u.Id != userId && u.Username.ToLower() == trimmedUsername.ToLower());
+                if (taken) {
+                    return new UpdateProfileResult(false, null, "Username already taken", IsConflict: true);
+                }
+                user.Username = trimmedUsername;
+            }
+        }
+
+        if (request.AvatarUrl != null) {
+            user.AvatarUrl = string.IsNullOrWhiteSpace(request.AvatarUrl) ? null : request.AvatarUrl.Trim();
+        }
+
+        if (request.Email != null) {
+            var trimmedEmail = request.Email.Trim().ToLower();
+            if (string.IsNullOrWhiteSpace(trimmedEmail)) {
+                user.Email = null;
+            } else {
+                if (!IsValidEmail(trimmedEmail)) {
+                    return new UpdateProfileResult(false, null, "A valid email address is required");
+                }
+                var emailTaken = await _context.Users.AnyAsync(u => u.Id != userId && u.Email != null && u.Email.ToLower() == trimmedEmail);
+                if (emailTaken) {
+                    return new UpdateProfileResult(false, null, "Email already in use", IsConflict: true);
+                }
+                user.Email = trimmedEmail;
+            }
+        }
+
+        user.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        var token = GenerateJwtToken(user);
+        return new UpdateProfileResult(true, new AuthResponse(token, user.Username, user.Email, user.AvatarUrl));
     }
 
     private string GenerateJwtToken(User user) {

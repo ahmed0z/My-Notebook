@@ -30,7 +30,7 @@ export const ArchivePage: React.FC<ArchivePageProps> = ({
   const [internalNotes, setInternalNotes] = useState<NoteDto[]>([]);
   const [internalLoading, setInternalLoading] = useState(true);
   const { isDark, toggleTheme } = useTheme();
-  const { logout, username } = useAuth();
+  const { logout, username, avatarUrl } = useAuth();
 
   const isControlled = externalNotes !== undefined;
   const allNotes = isControlled ? externalNotes : internalNotes;
@@ -171,9 +171,28 @@ export const ArchivePage: React.FC<ArchivePageProps> = ({
             </button>
 
             {username && (
-              <span className="text-xs font-medium text-stone-500 dark:text-stone-400 hidden sm:inline">
-                {username}
-              </span>
+              <div className="flex items-center gap-1.5 py-1 px-2 rounded-xl bg-stone-100/70 dark:bg-stone-800/60 border border-stone-200/50 dark:border-stone-700/50">
+                {avatarUrl ? (
+                  avatarUrl.startsWith('http') || avatarUrl.startsWith('/api') || avatarUrl.startsWith('data:') ? (
+                    <img
+                      src={avatarUrl}
+                      alt={username}
+                      className="w-5 h-5 rounded-full object-cover border border-stone-300 dark:border-stone-600 shadow-sm"
+                    />
+                  ) : (
+                    <span className="w-5 h-5 rounded-full bg-stone-200 dark:bg-stone-700 flex items-center justify-center text-xs">
+                      {avatarUrl}
+                    </span>
+                  )
+                ) : (
+                  <span className="w-5 h-5 rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300 flex items-center justify-center text-xs font-bold uppercase">
+                    {username.charAt(0)}
+                  </span>
+                )}
+                <span className="text-xs font-medium text-stone-700 dark:text-stone-300 hidden sm:inline">
+                  {username}
+                </span>
+              </div>
             )}
 
             <button

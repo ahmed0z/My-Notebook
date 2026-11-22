@@ -12,4 +12,7 @@ public interface IAuthService {
     Task<bool> ResetPasswordWithCodeAsync(string email, string code, string newPassword);
     Task<bool> UpdateEmailAsync(Guid userId, string email);
     Task<RegisterResult> RegisterAsync(RegisterRequest request);
+    Task<UserProfileResponse?> GetProfileAsync(Guid userId);
+    Task<UpdateProfileResult> UpdateProfileAsync(Guid userId, UpdateProfileRequest request);
+    Task<ForgotPasswordResponse> RequestPasswordCodeForUserAsync(Guid userId);
 }

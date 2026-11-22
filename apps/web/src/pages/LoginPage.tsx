@@ -39,7 +39,6 @@ export const LoginPage: React.FC = () => {
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
-  const [devCode, setDevCode] = useState<string | null>(null);
 
   // Status state
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +59,7 @@ export const LoginPage: React.FC = () => {
       setLoading(true);
       setError(null);
       const res = await ApiClient.login(loginUsername.trim(), loginPassword);
-      login(res.token, res.username);
+      login(res.token, res.username, res.email, res.avatarUrl);
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {
@@ -99,7 +98,7 @@ export const LoginPage: React.FC = () => {
     try {
       setLoading(true);
       const res = await ApiClient.register(trimmedUsername, trimmedEmail, signupPassword);
-      login(res.token, res.username);
+      login(res.token, res.username, res.email, res.avatarUrl);
     } catch (err: any) {
       setError(err.message || 'Registration failed');
     } finally {
@@ -114,12 +113,8 @@ export const LoginPage: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const res = await ApiClient.forgotPassword(resetEmail.trim());
-      setSuccessMessage('Reset code sent! Enter the 6-digit verification code below.');
-      if (res.devCode) {
-        setDevCode(res.devCode);
-        setResetCode(res.devCode);
-      }
+      await ApiClient.forgotPassword(resetEmail.trim());
+      setSuccessMessage('A 6-digit verification code has been sent to your email. Check your inbox and enter it below.');
       setResetStep('verify');
     } catch (err: any) {
       setError(err.message || 'Failed to request reset code');
@@ -154,7 +149,6 @@ export const LoginPage: React.FC = () => {
       setLoginUsername(resetEmail.trim());
       setLoginPassword(newPassword);
       setResetStep('request');
-      setDevCode(null);
     } catch (err: any) {
       setError(err.message || 'Failed to reset password');
     } finally {
@@ -460,7 +454,6 @@ export const LoginPage: React.FC = () => {
                 setMode('login');
                 setError(null);
                 setSuccessMessage(null);
-                setDevCode(null);
               }}
               className="inline-flex items-center gap-1.5 text-xs text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100 transition"
             >
@@ -499,13 +492,6 @@ export const LoginPage: React.FC = () => {
               >
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
                 <span>{successMessage}</span>
-              </div>
-            )}
-
-            {devCode && (
-              <div className="p-3 text-xs bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 rounded-2xl border border-amber-200 dark:border-amber-900/60 flex flex-col gap-1">
-                <span className="font-semibold">Development Code:</span>
-                <span className="font-mono text-base tracking-widest">{devCode}</span>
               </div>
             )}
 

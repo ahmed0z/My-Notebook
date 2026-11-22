@@ -56,7 +56,7 @@ describe('LoginPage with Material Design 3', () => {
 
       await waitFor(() => {
         expect(loginSpy).toHaveBeenCalledWith('alice', 'secret123');
-        expect(mockLogin).toHaveBeenCalledWith('test-token', 'alice');
+        expect(mockLogin).toHaveBeenCalledWith('test-token', 'alice', undefined, undefined);
       });
     });
 
@@ -174,7 +174,7 @@ describe('LoginPage with Material Design 3', () => {
 
       await waitFor(() => {
         expect(registerSpy).toHaveBeenCalledWith('bob', 'bob@example.com', 'securepassword');
-        expect(mockLogin).toHaveBeenCalledWith('new-user-token', 'bob');
+        expect(mockLogin).toHaveBeenCalledWith('new-user-token', 'bob', 'bob@example.com', undefined);
       });
     });
 
@@ -217,7 +217,6 @@ describe('LoginPage with Material Design 3', () => {
       const forgotSpy = vi.spyOn(ApiClient, 'forgotPassword').mockResolvedValueOnce({
         success: true,
         message: 'Reset code sent',
-        devCode: '654321',
       });
       const resetSpy = vi.spyOn(ApiClient, 'resetPassword').mockResolvedValueOnce({
         success: true,
@@ -240,8 +239,10 @@ describe('LoginPage with Material Design 3', () => {
         expect(screen.getByText(/verification code sent to/i)).toBeInTheDocument();
       });
 
-      // Step 2: devCode banner should display
-      expect(screen.getByText('654321')).toBeInTheDocument();
+      // Step 2: user enters code received in email
+      fireEvent.change(screen.getByLabelText(/verification code/i), {
+        target: { value: '654321' },
+      });
 
       fireEvent.change(screen.getByLabelText(/^new password$/i), {
         target: { value: 'newpassword123' },

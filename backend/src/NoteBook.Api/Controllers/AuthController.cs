@@ -83,16 +83,52 @@ public class AuthController : ControllerBase {
         return Ok(new { success = true });
     }
 
-    [HttpPost("users")]
+    [HttpGet("profile")]
     [Authorize]
-    public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest request) {
-        if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password)) {
-            return BadRequest(new { error = "Username and password are required" });
+    public async Task<IActionResult> GetProfile() {
+        var idStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(idStr, out var userId)) {
+            return Unauthorized(new { error = "User not authenticated" });
         }
 
-        var result = await _authService.CreateUserAsync(request.Username, request.Password, request.Email);
-        if (result == null) {
-            return Conflict(new { error = "Username or email already exists" });
+        var profile = await _authService.GetProfileAsync(userId);
+        if (profile == null) {
+            return NotFound(new { error = "User profile not found" });
+        }
+
+        return Ok(profile);
+    }
+
+    [HttpPut("profile")]
+    [Authorize]
+    public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request) {
+        var idStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(idStr, out var userId)) {
+            return Unauthorized(new { error = "User not authenticated" });
+        }
+
+        var result = await _authService.UpdateProfileAsync(userId, request);
+        if (!result.Success) {
+            if (result.IsConflict) {
+                return Conflict(new { error = result.Error });
+            }
+            return BadRequest(new { error = result.Error });
+        }
+
+        return Ok(result.Response);
+    }
+
+    [HttpPost("request-password-code")]
+    [Authorize]
+    public async Task<IActionResult> RequestPasswordCode() {
+        var idStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(idStr, out var userId)) {
+            return Unauthorized(new { error = "User not authenticated" });
+        }
+
+        var result = await _authService.RequestPasswordCodeForUserAsync(userId);
+        if (!result.Success) {
+            return BadRequest(new { error = result.Message });
         }
 
         return Ok(result);

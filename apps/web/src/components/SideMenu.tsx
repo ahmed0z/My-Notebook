@@ -2,6 +2,7 @@ import React from 'react';
 import { StickyNote, Archive, Settings, ChevronLeft } from 'lucide-react';
 import { SpaceDto } from '@notebook/shared';
 import { SpaceSelector } from './SpaceSelector';
+import { useAuth } from '../context/AuthContext';
 
 export interface SideMenuProps {
   isOpen: boolean;
@@ -40,6 +41,7 @@ export const SideMenu: React.FC<SideMenuProps> = ({
   onUpdateSpace,
   onDeleteSpace
 }) => {
+  const { username, avatarUrl } = useAuth();
   return (
     <>
       {/* Backdrop overlay */}
@@ -124,11 +126,33 @@ export const SideMenu: React.FC<SideMenuProps> = ({
           )}
         </nav>
 
-        {/* Footer info */}
-        <div className="px-5 py-4 border-t border-stone-200/60 dark:border-stone-800">
-          <p className="text-xs text-stone-400 dark:text-stone-500">
-            NoteBook Workspace
-          </p>
+        {/* Footer info & Profile */}
+        <div className="px-4 py-3 border-t border-stone-200/60 dark:border-stone-800 flex items-center gap-2.5">
+          {avatarUrl ? (
+            avatarUrl.startsWith('http') || avatarUrl.startsWith('/api') || avatarUrl.startsWith('data:') ? (
+              <img
+                src={avatarUrl}
+                alt={username || 'Profile'}
+                className="w-8 h-8 rounded-full object-cover border border-stone-200 dark:border-stone-700 shadow-sm"
+              />
+            ) : (
+              <span className="w-8 h-8 rounded-full bg-stone-200 dark:bg-stone-800 flex items-center justify-center text-base border border-stone-300 dark:border-stone-700">
+                {avatarUrl}
+              </span>
+            )
+          ) : (
+            <span className="w-8 h-8 rounded-full bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-300 flex items-center justify-center text-xs font-bold uppercase border border-stone-300 dark:border-stone-700">
+              {username ? username.charAt(0) : 'U'}
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold text-stone-800 dark:text-stone-200 truncate">
+              {username || 'NoteBook User'}
+            </p>
+            <p className="text-[11px] text-stone-400 dark:text-stone-500 truncate">
+              Personal Workspace
+            </p>
+          </div>
         </div>
       </aside>
     </>

@@ -61,8 +61,8 @@ export class ApiClient {
     return this.request<{ isConfigured: boolean }>('/auth/status');
   }
 
-  public static async register(username: string, email: string, password: string): Promise<{ token: string; username: string; email?: string }> {
-    const data = await this.request<{ token: string; username: string; email?: string }>('/auth/register', {
+  public static async register(username: string, email: string, password: string): Promise<{ token: string; username: string; email?: string | null; avatarUrl?: string | null }> {
+    const data = await this.request<{ token: string; username: string; email?: string | null; avatarUrl?: string | null }>('/auth/register', {
       method: 'POST',
       body: JSON.stringify({ username, email, password })
     });
@@ -70,8 +70,8 @@ export class ApiClient {
     return data;
   }
 
-  public static async setup(username: string, password: string): Promise<{ token: string; username: string }> {
-    const data = await this.request<{ token: string; username: string }>('/auth/setup', {
+  public static async setup(username: string, password: string): Promise<{ token: string; username: string; email?: string | null; avatarUrl?: string | null }> {
+    const data = await this.request<{ token: string; username: string; email?: string | null; avatarUrl?: string | null }>('/auth/setup', {
       method: 'POST',
       body: JSON.stringify({ username, password })
     });
@@ -79,13 +79,34 @@ export class ApiClient {
     return data;
   }
 
-  public static async login(username: string, password: string): Promise<{ token: string; username: string }> {
-    const data = await this.request<{ token: string; username: string }>('/auth/login', {
+  public static async login(username: string, password: string): Promise<{ token: string; username: string; email?: string | null; avatarUrl?: string | null }> {
+    const data = await this.request<{ token: string; username: string; email?: string | null; avatarUrl?: string | null }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password })
     });
     this.setToken(data.token);
     return data;
+  }
+
+  public static async getProfile(): Promise<{ id: string; username: string; email?: string | null; avatarUrl?: string | null; createdAt: string }> {
+    return this.request<{ id: string; username: string; email?: string | null; avatarUrl?: string | null; createdAt: string }>('/auth/profile');
+  }
+
+  public static async updateProfile(data: { username?: string; avatarUrl?: string | null; email?: string | null }): Promise<{ token: string; username: string; email?: string | null; avatarUrl?: string | null }> {
+    const res = await this.request<{ token: string; username: string; email?: string | null; avatarUrl?: string | null }>('/auth/profile', {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+    if (res.token) {
+      this.setToken(res.token);
+    }
+    return res;
+  }
+
+  public static async requestPasswordCode(): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>('/auth/request-password-code', {
+      method: 'POST'
+    });
   }
 
   public static async changePassword(currentPassword: string, newPassword: string): Promise<{ success: boolean }> {
@@ -95,15 +116,8 @@ export class ApiClient {
     });
   }
 
-  public static async createUser(username: string, password: string, email?: string): Promise<{ token: string; username: string }> {
-    return this.request<{ token: string; username: string }>('/auth/users', {
-      method: 'POST',
-      body: JSON.stringify({ username, password, email })
-    });
-  }
-
-  public static async forgotPassword(email: string): Promise<{ success: boolean; message: string; devCode?: string }> {
-    return this.request<{ success: boolean; message: string; devCode?: string }>('/auth/forgot-password', {
+  public static async forgotPassword(email: string): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>('/auth/forgot-password', {
       method: 'POST',
       body: JSON.stringify({ email })
     });

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NoteBook.Api.Data;
 using NoteBook.Api.DTOs;
@@ -114,20 +115,19 @@ public class PasswordResetEmailTests {
         var response = await authService.RequestPasswordResetAsync("bob@example.com");
 
         Assert.True(response.Success);
-        Assert.NotNull(response.DevCode);
-        Assert.Equal(6, response.DevCode!.Length);
-        Assert.True(int.TryParse(response.DevCode, out _));
 
         var updatedUser = await db.Users.FindAsync(user.Id);
         Assert.NotNull(updatedUser);
-        Assert.Equal(response.DevCode, updatedUser!.ResetCode);
+        Assert.NotNull(updatedUser!.ResetCode);
+        Assert.Equal(6, updatedUser.ResetCode.Length);
+        Assert.True(int.TryParse(updatedUser.ResetCode, out _));
         Assert.NotNull(updatedUser.ResetCodeExpiresAt);
         Assert.True(updatedUser.ResetCodeExpiresAt > DateTime.UtcNow.AddMinutes(14));
         Assert.True(updatedUser.ResetCodeExpiresAt <= DateTime.UtcNow.AddMinutes(16));
 
         Assert.Single(fakeSender.SentEmails);
         Assert.Equal("bob@example.com", fakeSender.SentEmails[0].Email);
-        Assert.Equal(response.DevCode, fakeSender.SentEmails[0].Code);
+        Assert.Equal(updatedUser.ResetCode, fakeSender.SentEmails[0].Code);
         Assert.Equal("bob", fakeSender.SentEmails[0].Username);
     }
 
@@ -234,12 +234,16 @@ public class PasswordResetEmailTests {
         var forgotData = await forgotRes.Content.ReadFromJsonAsync<ForgotPasswordTestResponse>();
         Assert.NotNull(forgotData);
         Assert.True(forgotData.Success);
-        Assert.NotNull(forgotData.DevCode);
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<NoteBook.Api.Data.AppDbContext>();
+        var user = await db.Users.FirstAsync(u => u.Email == "integration_pw@example.com");
+        Assert.NotNull(user.ResetCode);
 
         // Reset password with code
         var resetRes = await client.PostAsJsonAsync("/api/auth/reset-password", new {
             Email = "integration_pw@example.com",
-            Code = forgotData.DevCode,
+            Code = user.ResetCode,
             NewPassword = "BrandNewPassword789!"
         });
         Assert.Equal(HttpStatusCode.OK, resetRes.StatusCode);
@@ -259,5 +263,5 @@ public class PasswordResetEmailTests {
         Assert.Equal(HttpStatusCode.Unauthorized, oldLoginRes.StatusCode);
     }
 
-    private record ForgotPasswordTestResponse(bool Success, string Message, string? DevCode);
+    private record ForgotPasswordTestResponse(bool Success, string Message);
 }

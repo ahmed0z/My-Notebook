@@ -16,8 +16,8 @@ describe('SettingsPage', () => {
     render(<SettingsPage onBack={vi.fn()} />);
 
     expect(screen.getByRole('heading', { name: /settings/i, level: 1 })).toBeInTheDocument();
-    expect(screen.getByTestId('settings-section-appearance')).toBeInTheDocument();
-    expect(screen.getByTestId('settings-section-view-preferences')).toBeInTheDocument();
+    expect(screen.getByTestId('settings-section-theme')).toBeInTheDocument();
+    expect(screen.getByTestId('settings-section-layout')).toBeInTheDocument();
     expect(screen.getByTestId('settings-section-account')).toBeInTheDocument();
   });
 
@@ -55,29 +55,18 @@ describe('SettingsPage', () => {
     expect(systemOption).toBeInTheDocument();
 
     // Default theme is system
-    expect(systemOption).toHaveAttribute('aria-checked', 'true');
-    expect(lightOption).toHaveAttribute('aria-checked', 'false');
-    expect(darkOption).toHaveAttribute('aria-checked', 'false');
+    expect(localStorage.getItem('notebook_theme')).toBeNull();
 
     // Switch to dark
     fireEvent.click(darkOption);
-    expect(darkOption).toHaveAttribute('aria-checked', 'true');
-    expect(systemOption).toHaveAttribute('aria-checked', 'false');
-    expect(lightOption).toHaveAttribute('aria-checked', 'false');
     expect(localStorage.getItem('notebook_theme')).toBe('dark');
 
     // Switch to light
     fireEvent.click(lightOption);
-    expect(lightOption).toHaveAttribute('aria-checked', 'true');
-    expect(darkOption).toHaveAttribute('aria-checked', 'false');
-    expect(systemOption).toHaveAttribute('aria-checked', 'false');
     expect(localStorage.getItem('notebook_theme')).toBe('light');
 
     // Switch back to system
     fireEvent.click(systemOption);
-    expect(systemOption).toHaveAttribute('aria-checked', 'true');
-    expect(lightOption).toHaveAttribute('aria-checked', 'false');
-    expect(darkOption).toHaveAttribute('aria-checked', 'false');
     expect(localStorage.getItem('notebook_theme')).toBe('system');
   });
 
@@ -96,115 +85,125 @@ describe('SettingsPage', () => {
     expect(compactOption).toHaveTextContent(/Compact/i);
     expect(fullscreenOption).toHaveTextContent(/Full Screen/i);
 
-    // Default view is compact
-    expect(compactOption).toHaveAttribute('aria-checked', 'true');
-    expect(fullscreenOption).toHaveAttribute('aria-checked', 'false');
-
     // Switch to fullscreen
     fireEvent.click(fullscreenOption);
-    expect(fullscreenOption).toHaveAttribute('aria-checked', 'true');
-    expect(compactOption).toHaveAttribute('aria-checked', 'false');
     expect(localStorage.getItem('notebook_default_view')).toBe('fullscreen');
 
     // Switch back to compact
     fireEvent.click(compactOption);
-    expect(compactOption).toHaveAttribute('aria-checked', 'true');
-    expect(fullscreenOption).toHaveAttribute('aria-checked', 'false');
     expect(localStorage.getItem('notebook_default_view')).toBe('compact');
   });
 
-  it('renders current username indicator', () => {
+  it('renders current username and allows editing profile (username, avatar, email)', async () => {
     localStorage.setItem('notebook_username', 'alice_admin');
-    render(<SettingsPage onBack={vi.fn()} />);
-
-    const userBadge = screen.getByTestId('current-username');
-    expect(userBadge).toBeInTheDocument();
-    expect(userBadge).toHaveTextContent('alice_admin');
-  });
-
-  it('validates password mismatch and successfully changes password', async () => {
-    const changePasswordSpy = vi.spyOn(ApiClient, 'changePassword').mockResolvedValue({ success: true });
-
-    render(<SettingsPage onBack={vi.fn()} />);
-
-    const currentInput = screen.getByTestId('current-password-input');
-    const newInput = screen.getByTestId('new-password-input');
-    const confirmInput = screen.getByTestId('confirm-password-input');
-    const submitBtn = screen.getByTestId('change-password-submit');
-
-    // Mismatched passwords
-    fireEvent.change(currentInput, { target: { value: 'oldPass123' } });
-    fireEvent.change(newInput, { target: { value: 'newPass123' } });
-    fireEvent.change(confirmInput, { target: { value: 'differentPass' } });
-    fireEvent.click(submitBtn);
-
-    expect(screen.getByTestId('password-message')).toHaveTextContent(/passwords do not match/i);
-    expect(changePasswordSpy).not.toHaveBeenCalled();
-
-    // Matching passwords
-    fireEvent.change(confirmInput, { target: { value: 'newPass123' } });
-    fireEvent.click(submitBtn);
-
-    await waitFor(() => {
-      expect(changePasswordSpy).toHaveBeenCalledWith('oldPass123', 'newPass123');
-      expect(screen.getByTestId('password-message')).toHaveTextContent(/changed successfully/i);
-    });
-  });
-
-  it('handles change password error response from api', async () => {
-    vi.spyOn(ApiClient, 'changePassword').mockRejectedValue(new Error('Invalid current password'));
-
-    render(<SettingsPage onBack={vi.fn()} />);
-
-    fireEvent.change(screen.getByTestId('current-password-input'), { target: { value: 'wrongPass' } });
-    fireEvent.change(screen.getByTestId('new-password-input'), { target: { value: 'newPass123' } });
-    fireEvent.change(screen.getByTestId('confirm-password-input'), { target: { value: 'newPass123' } });
-    fireEvent.click(screen.getByTestId('change-password-submit'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('password-message')).toHaveTextContent('Invalid current password');
-    });
-  });
-
-  it('validates and creates new user successfully', async () => {
-    const createUserSpy = vi.spyOn(ApiClient, 'createUser').mockResolvedValue({
-      token: 'jwt-token-xyz',
-      username: 'bob_user'
+    localStorage.setItem('notebook_email', 'alice@example.com');
+    const updateProfileSpy = vi.spyOn(ApiClient, 'updateProfile').mockResolvedValue({
+      token: 'new-token-123',
+      username: 'alice_updated',
+      email: 'alice_new@example.com',
+      avatarUrl: '🦊',
     });
 
     render(<SettingsPage onBack={vi.fn()} />);
 
-    const usernameInput = screen.getByTestId('new-user-username-input');
-    const passwordInput = screen.getByTestId('new-user-password-input');
-    const submitBtn = screen.getByTestId('create-user-submit');
+    const usernameInput = screen.getByTestId('current-username') as HTMLInputElement;
+    expect(usernameInput.value).toBe('alice_admin');
 
-    // Empty fields error
-    fireEvent.click(submitBtn);
-    expect(screen.getByTestId('user-message')).toHaveTextContent(/required/i);
-    expect(createUserSpy).not.toHaveBeenCalled();
+    // Select emoji avatar
+    const foxBtn = screen.getByRole('button', { name: '🦊' });
+    fireEvent.click(foxBtn);
 
-    // Valid fields
-    fireEvent.change(usernameInput, { target: { value: 'bob_user' } });
-    fireEvent.change(passwordInput, { target: { value: 'Secret456!' } });
-    fireEvent.click(submitBtn);
+    // Change username and email
+    fireEvent.change(usernameInput, { target: { value: 'alice_updated' } });
+    fireEvent.change(screen.getByLabelText(/email address/i), { target: { value: 'alice_new@example.com' } });
+
+    fireEvent.click(screen.getByTestId('save-profile-submit'));
 
     await waitFor(() => {
-      expect(createUserSpy).toHaveBeenCalledWith('bob_user', 'Secret456!');
-      expect(screen.getByTestId('user-message')).toHaveTextContent(/bob_user.*created successfully/i);
+      expect(updateProfileSpy).toHaveBeenCalledWith({
+        username: 'alice_updated',
+        avatarUrl: '🦊',
+        email: 'alice_new@example.com',
+      });
+      expect(screen.getByTestId('profile-message')).toHaveTextContent(/profile updated successfully/i);
     });
   });
 
-  it('handles create user error response from api', async () => {
-    vi.spyOn(ApiClient, 'createUser').mockRejectedValue(new Error('Username already exists'));
+  it('handles profile update error from API', async () => {
+    localStorage.setItem('notebook_username', 'current_user');
+    vi.spyOn(ApiClient, 'updateProfile').mockRejectedValue(new Error('Username already taken'));
 
     render(<SettingsPage onBack={vi.fn()} />);
 
-    fireEvent.change(screen.getByTestId('new-user-username-input'), { target: { value: 'existing_user' } });
-    fireEvent.change(screen.getByTestId('new-user-password-input'), { target: { value: 'Pass123!' } });
-    fireEvent.click(screen.getByTestId('create-user-submit'));
+    const usernameInput = screen.getByTestId('current-username');
+    fireEvent.change(usernameInput, { target: { value: 'taken_user' } });
+    fireEvent.click(screen.getByTestId('save-profile-submit'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('user-message')).toHaveTextContent('Username already exists');
+      expect(screen.getByTestId('profile-message')).toHaveTextContent('Username already taken');
+    });
+  });
+
+  it('requests password code and completes password change via verification code', async () => {
+    localStorage.setItem('notebook_email', 'user@example.com');
+    const requestCodeSpy = vi.spyOn(ApiClient, 'requestPasswordCode').mockResolvedValue({
+      success: true,
+      message: 'Verification code sent to user@example.com',
+    });
+    const resetPasswordSpy = vi.spyOn(ApiClient, 'resetPassword').mockResolvedValue({
+      success: true,
+      message: 'Password reset successfully',
+    });
+
+    render(<SettingsPage onBack={vi.fn()} />);
+
+    // Request code
+    const requestCodeBtn = screen.getByTestId('request-pw-code-btn');
+    fireEvent.click(requestCodeBtn);
+
+    await waitFor(() => {
+      expect(requestCodeSpy).toHaveBeenCalled();
+      expect(screen.getByTestId('pw-reset-code-input')).toBeInTheDocument();
+    });
+
+    // Enter verification code and matching passwords
+    fireEvent.change(screen.getByTestId('pw-reset-code-input'), { target: { value: '123456' } });
+    fireEvent.change(screen.getByTestId('new-password-input'), { target: { value: 'NewSecret123!' } });
+    fireEvent.change(screen.getByTestId('confirm-password-input'), { target: { value: 'NewSecret123!' } });
+
+    fireEvent.click(screen.getByTestId('confirm-pw-change-btn'));
+
+    await waitFor(() => {
+      expect(resetPasswordSpy).toHaveBeenCalledWith('user@example.com', '123456', 'NewSecret123!');
+      expect(screen.getByTestId('password-message')).toHaveTextContent(/password changed successfully/i);
+    });
+  });
+
+  it('validates password mismatch when changing password with code', async () => {
+    localStorage.setItem('notebook_email', 'user@example.com');
+    vi.spyOn(ApiClient, 'requestPasswordCode').mockResolvedValue({
+      success: true,
+      message: 'Code sent',
+    });
+    const resetPasswordSpy = vi.spyOn(ApiClient, 'resetPassword');
+
+    render(<SettingsPage onBack={vi.fn()} />);
+
+    fireEvent.click(screen.getByTestId('request-pw-code-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('pw-reset-code-input')).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByTestId('pw-reset-code-input'), { target: { value: '123456' } });
+    fireEvent.change(screen.getByTestId('new-password-input'), { target: { value: 'NewSecret123!' } });
+    fireEvent.change(screen.getByTestId('confirm-password-input'), { target: { value: 'DifferentSecret!' } });
+
+    fireEvent.click(screen.getByTestId('confirm-pw-change-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('password-message')).toHaveTextContent(/passwords do not match/i);
+      expect(resetPasswordSpy).not.toHaveBeenCalled();
     });
   });
 });

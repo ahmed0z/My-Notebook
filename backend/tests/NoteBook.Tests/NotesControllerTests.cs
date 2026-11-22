@@ -107,14 +107,14 @@ public class NotesControllerTests {
         var auth1 = await setupRes.Content.ReadFromJsonAsync<AuthTokenResponse>();
         client1.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth1!.Token);
 
-        // 2. User 1 creates User 2
-        var createRes = await client1.PostAsJsonAsync("/api/auth/users", new { Username = "user2", Password = "Password2!" });
-        Assert.Equal(HttpStatusCode.OK, createRes.StatusCode);
-
-        // 3. User 2 logs in
-        var login2Res = await client2.PostAsJsonAsync("/api/auth/login", new { Username = "user2", Password = "Password2!" });
-        Assert.Equal(HttpStatusCode.OK, login2Res.StatusCode);
-        var auth2 = await login2Res.Content.ReadFromJsonAsync<AuthTokenResponse>();
+        // 2. User 2 registers
+        var regRes = await client2.PostAsJsonAsync("/api/auth/register", new {
+            Username = "user2",
+            Email = "user2@example.com",
+            Password = "Password2!"
+        });
+        Assert.Equal(HttpStatusCode.OK, regRes.StatusCode);
+        var auth2 = await regRes.Content.ReadFromJsonAsync<AuthTokenResponse>();
         client2.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth2!.Token);
 
         // 4. User 1 creates Note 1

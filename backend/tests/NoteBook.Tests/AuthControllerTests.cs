@@ -91,64 +91,91 @@ public class AuthControllerTests {
     }
 
     [Fact]
-    public async Task CreateUser_WhenAuthenticated_CreatesNewUserAndAllowsLogin() {
+    public async Task GetProfile_WhenAuthenticated_ReturnsProfileWithAvatar() {
         var factory = new CustomWebApplicationFactory();
         var client = factory.CreateClient();
 
-        var setupRes = await client.PostAsJsonAsync("/api/auth/setup", new { Username = "admin", Password = "OldPassword123!" });
+        var setupRes = await client.PostAsJsonAsync("/api/auth/setup", new { Username = "profile_user", Password = "Password123!" });
         var auth = await setupRes.Content.ReadFromJsonAsync<AuthTokenResponse>();
         client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", auth!.Token);
 
-        var createRes = await client.PostAsJsonAsync("/api/auth/users", new {
-            Username = "second_user",
-            Password = "SecondPassword123!"
-        });
-        Assert.Equal(HttpStatusCode.OK, createRes.StatusCode);
-        var createdUser = await createRes.Content.ReadFromJsonAsync<AuthTokenResponse>();
-        Assert.NotNull(createdUser);
-        Assert.Equal("second_user", createdUser.Username);
-
-        // Second user can log in
-        var secondLoginRes = await client.PostAsJsonAsync("/api/auth/login", new {
-            Username = "second_user",
-            Password = "SecondPassword123!"
-        });
-        Assert.Equal(HttpStatusCode.OK, secondLoginRes.StatusCode);
-
-        // Verify default "General" space is seeded for new user
-        using var scope = factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NoteBook.Api.Data.AppDbContext>();
-        var secondUser = await db.Users.FirstAsync(u => u.Username == "second_user");
-        var userSpace = await db.Spaces.FirstOrDefaultAsync(s => s.UserId == secondUser.Id && s.Name == "General");
-        Assert.NotNull(userSpace);
+        var profileRes = await client.GetAsync("/api/auth/profile");
+        Assert.Equal(HttpStatusCode.OK, profileRes.StatusCode);
+        var profile = await profileRes.Content.ReadFromJsonAsync<UserProfileTestResponse>();
+        Assert.NotNull(profile);
+        Assert.Equal("profile_user", profile.Username);
     }
 
     [Fact]
-    public async Task CreateUser_WhenDuplicateUsername_ReturnsConflict() {
+    public async Task UpdateProfile_WhenAuthenticated_UpdatesUsernameAndAvatar() {
         var factory = new CustomWebApplicationFactory();
         var client = factory.CreateClient();
 
-        var setupRes = await client.PostAsJsonAsync("/api/auth/setup", new { Username = "admin", Password = "OldPassword123!" });
+        var setupRes = await client.PostAsJsonAsync("/api/auth/setup", new { Username = "initial_name", Password = "Password123!" });
         var auth = await setupRes.Content.ReadFromJsonAsync<AuthTokenResponse>();
         client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", auth!.Token);
 
-        var duplicateRes = await client.PostAsJsonAsync("/api/auth/users", new {
-            Username = "ADMIN", // case-insensitive duplicate check
-            Password = "AnotherPassword123!"
+        var updateRes = await client.PutAsJsonAsync("/api/auth/profile", new {
+            Username = "new_cool_name",
+            AvatarUrl = "🎨",
+            Email = "new_email@example.com"
         });
-        Assert.Equal(HttpStatusCode.Conflict, duplicateRes.StatusCode);
-    }
+        Assert.Equal(HttpStatusCode.OK, updateRes.StatusCode);
+        var updatedAuth = await updateRes.Content.ReadFromJsonAsync<AuthTokenResponse>();
+        Assert.NotNull(updatedAuth);
+        Assert.Equal("new_cool_name", updatedAuth.Username);
+        Assert.Equal("🎨", updatedAuth.AvatarUrl);
 
-    [Fact]
-    public async Task CreateUser_WhenUnauthenticated_ReturnsUnauthorized() {
-        var factory = new CustomWebApplicationFactory();
-        var client = factory.CreateClient();
-
-        var createRes = await client.PostAsJsonAsync("/api/auth/users", new {
-            Username = "anonymous_attempt",
+        // Verify login with new username
+        var loginRes = await client.PostAsJsonAsync("/api/auth/login", new {
+            Username = "new_cool_name",
             Password = "Password123!"
         });
-        Assert.Equal(HttpStatusCode.Unauthorized, createRes.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, loginRes.StatusCode);
+    }
+
+    [Fact]
+    public async Task UpdateProfile_WhenDuplicateUsername_ReturnsConflict() {
+        var factory = new CustomWebApplicationFactory();
+        var client = factory.CreateClient();
+
+        await client.PostAsJsonAsync("/api/auth/setup", new { Username = "user_one", Password = "Password123!" });
+        var regRes = await client.PostAsJsonAsync("/api/auth/register", new {
+            Username = "user_two",
+            Email = "user_two@example.com",
+            Password = "Password123!"
+        });
+        Assert.Equal(HttpStatusCode.OK, regRes.StatusCode);
+        var authTwo = await regRes.Content.ReadFromJsonAsync<AuthTokenResponse>();
+        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authTwo!.Token);
+
+        var conflictRes = await client.PutAsJsonAsync("/api/auth/profile", new {
+            Username = "USER_ONE" // case insensitive duplicate
+        });
+        Assert.Equal(HttpStatusCode.Conflict, conflictRes.StatusCode);
+    }
+
+    [Fact]
+    public async Task RequestPasswordCode_WhenAuthenticated_GeneratesResetCode() {
+        var factory = new CustomWebApplicationFactory();
+        var client = factory.CreateClient();
+
+        var setupRes = await client.PostAsJsonAsync("/api/auth/setup", new {
+            Username = "code_requester",
+            Password = "Password123!",
+            Email = "requester@example.com"
+        });
+        var auth = await setupRes.Content.ReadFromJsonAsync<AuthTokenResponse>();
+        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", auth!.Token);
+
+        var reqRes = await client.PostAsync("/api/auth/request-password-code", null);
+        Assert.Equal(HttpStatusCode.OK, reqRes.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<NoteBook.Api.Data.AppDbContext>();
+        var user = await db.Users.FirstAsync(u => u.Username == "code_requester");
+        Assert.NotNull(user.ResetCode);
+        Assert.Equal(6, user.ResetCode.Length);
     }
 
     [Fact]
@@ -179,8 +206,13 @@ public class AuthControllerTests {
         var forgotData = await forgotRes.Content.ReadFromJsonAsync<ForgotPasswordTestResponse>();
         Assert.NotNull(forgotData);
         Assert.True(forgotData.Success);
-        Assert.NotNull(forgotData.DevCode);
-        Assert.Equal(6, forgotData.DevCode.Length);
+
+        // Retrieve code directly from DB (no devCode leakage in API response)
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<NoteBook.Api.Data.AppDbContext>();
+        var user = await db.Users.FirstAsync(u => u.Email == "testuser@example.com");
+        Assert.NotNull(user.ResetCode);
+        Assert.Equal(6, user.ResetCode.Length);
 
         // Try wrong code -> returns BadRequest
         var wrongCodeRes = await client.PostAsJsonAsync("/api/auth/reset-password", new {
@@ -193,7 +225,7 @@ public class AuthControllerTests {
         // Correct code -> returns OK
         var correctResetRes = await client.PostAsJsonAsync("/api/auth/reset-password", new {
             Email = "testuser@example.com",
-            Code = forgotData.DevCode,
+            Code = user.ResetCode,
             NewPassword = "BrandNewPassword456!"
         });
         Assert.Equal(HttpStatusCode.OK, correctResetRes.StatusCode);
@@ -236,6 +268,7 @@ public class AuthControllerTests {
     }
 
     private record StatusResponse(bool IsConfigured);
-    private record AuthTokenResponse(string Token, string Username);
-    private record ForgotPasswordTestResponse(bool Success, string Message, string? DevCode);
+    private record AuthTokenResponse(string Token, string Username, string? AvatarUrl = null);
+    private record UserProfileTestResponse(Guid Id, string Username, string? Email, string? AvatarUrl, DateTime CreatedAt);
+    private record ForgotPasswordTestResponse(bool Success, string Message);
 }

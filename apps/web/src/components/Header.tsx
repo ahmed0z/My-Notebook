@@ -2,11 +2,13 @@ import React from 'react';
 import { SpaceDto } from '@notebook/shared';
 import { SearchBar } from './SearchBar';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { Sun, Moon, LogOut, Menu, ArrowLeft, Folder } from 'lucide-react';
 
 export interface HeaderProps {
   onSearch: (query: string) => void;
   username?: string | null;
+  avatarUrl?: string | null;
   onLogout: () => void;
   onToggleSideMenu?: () => void;
   activeSpace?: SpaceDto | null;
@@ -16,12 +18,15 @@ export interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   onSearch,
   username,
+  avatarUrl,
   onLogout,
   onToggleSideMenu,
   activeSpace,
   onBackToAllNotes,
 }) => {
   const { isDark, toggleTheme } = useTheme();
+  const { avatarUrl: contextAvatarUrl } = useAuth();
+  const activeAvatar = avatarUrl !== undefined ? avatarUrl : contextAvatarUrl;
 
   return (
     <header className="sticky top-0 z-10 bg-stone-50/80 dark:bg-stone-900/90 backdrop-blur-md border-b border-stone-200/60 dark:border-stone-800 px-4 py-3 sm:px-6 lg:px-8 transition-colors">
@@ -87,9 +92,28 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           {username && (
-            <span className="text-xs font-medium text-stone-500 dark:text-stone-400 hidden sm:inline">
-              {username}
-            </span>
+            <div className="flex items-center gap-1.5 py-1 px-2 rounded-xl bg-stone-100/70 dark:bg-stone-800/60 border border-stone-200/50 dark:border-stone-700/50">
+              {activeAvatar ? (
+                activeAvatar.startsWith('http') || activeAvatar.startsWith('/api') || activeAvatar.startsWith('data:') ? (
+                  <img
+                    src={activeAvatar}
+                    alt={username}
+                    className="w-5 h-5 rounded-full object-cover border border-stone-300 dark:border-stone-600 shadow-sm"
+                  />
+                ) : (
+                  <span className="w-5 h-5 rounded-full bg-stone-200 dark:bg-stone-700 flex items-center justify-center text-xs">
+                    {activeAvatar}
+                  </span>
+                )
+              ) : (
+                <span className="w-5 h-5 rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300 flex items-center justify-center text-xs font-bold uppercase">
+                  {username.charAt(0)}
+                </span>
+              )}
+              <span className="text-xs font-medium text-stone-700 dark:text-stone-300 hidden sm:inline">
+                {username}
+              </span>
+            </div>
           )}
 
           <button
