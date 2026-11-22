@@ -13,3 +13,10 @@ export interface LoginRequestDto {
   username: string;
   passwordHash: string;
 }
+
+export interface RegisterRequest {
+  username: string;
+  email: string;
+  password: string;
+}
+

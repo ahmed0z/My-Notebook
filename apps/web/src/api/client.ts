@@ -61,6 +61,15 @@ export class ApiClient {
     return this.request<{ isConfigured: boolean }>('/auth/status');
   }
 
+  public static async register(username: string, email: string, password: string): Promise<{ token: string; username: string; email?: string }> {
+    const data = await this.request<{ token: string; username: string; email?: string }>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ username, email, password })
+    });
+    this.setToken(data.token);
+    return data;
+  }
+
   public static async setup(username: string, password: string): Promise<{ token: string; username: string }> {
     const data = await this.request<{ token: string; username: string }>('/auth/setup', {
       method: 'POST',
