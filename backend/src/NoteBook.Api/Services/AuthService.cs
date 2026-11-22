@@ -14,10 +14,12 @@ public class AuthService : IAuthService {
 
     private readonly AppDbContext _context;
     private readonly IConfiguration _configuration;
+    private readonly IEmailSender _emailSender;
 
-    public AuthService(AppDbContext context, IConfiguration configuration) {
+    public AuthService(AppDbContext context, IConfiguration configuration, IEmailSender emailSender) {
         _context = context;
         _configuration = configuration;
+        _emailSender = emailSender;
     }
 
     public async Task<bool> IsConfiguredAsync() {
@@ -209,14 +211,18 @@ public class AuthService : IAuthService {
             return new ForgotPasswordResponse(true, "If an account with that email exists, a reset code has been sent.");
         }
 
-        var random = new Random();
-        var code = random.Next(100000, 999999).ToString();
+        var code = System.Security.Cryptography.RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
         user.ResetCode = code;
         user.ResetCodeExpiresAt = DateTime.UtcNow.AddMinutes(15);
         user.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
 
-        return new ForgotPasswordResponse(true, "Reset code generated and valid for 15 minutes.", code);
+        await _emailSender.SendPasswordResetEmailAsync(user.Email!, code, user.Username);
+
+        var enableDevCode = _configuration["EnableDevResetCodes"] == "true" 
+            || (string.IsNullOrWhiteSpace(_configuration["Smtp:Host"]) && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("SMTP_HOST")));
+
+        return new ForgotPasswordResponse(true, "If an account with that email exists, a reset code has been sent.", enableDevCode ? code : null);
     }
 
     public async Task<bool> ResetPasswordWithCodeAsync(string email, string code, string newPassword) {
