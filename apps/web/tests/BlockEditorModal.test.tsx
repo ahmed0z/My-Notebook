@@ -501,10 +501,10 @@ describe('BlockEditorModal', () => {
     expect(scrollContainer).toHaveClass('overflow-y-auto');
 
     const contentColumn = screen.getByTestId('note-content-column');
-    expect(contentColumn).toHaveClass('max-w-4xl');
+    expect(contentColumn).toHaveClass('w-full');
   });
 
-  it('toggles between readable column and full width via NoteActionsMenu', async () => {
+  it('keeps items bounded and does not stretch them in full width mode', async () => {
     localStorage.removeItem('notebook_note_full_width');
     const note: NoteDto = {
       id: 'n1',
@@ -521,14 +521,18 @@ describe('BlockEditorModal', () => {
     render(
       <BlockEditorModal
         note={note}
-        isEmbedded={true}
         onClose={() => {}}
         onNoteUpdated={() => {}}
       />
     );
 
+    // Enter full screen
+    const fullscreenBtn = screen.getByTitle('Full screen');
+    fireEvent.click(fullscreenBtn);
+
     const contentColumn = screen.getByTestId('note-content-column');
     expect(contentColumn).toHaveClass('max-w-4xl');
+    expect(contentColumn).not.toHaveClass('max-w-full');
 
     // Open 3-dot options menu
     const optionsBtn = screen.getByTitle('Note options');
@@ -538,6 +542,8 @@ describe('BlockEditorModal', () => {
     const fullWidthSwitch = screen.getByRole('switch', { name: /toggle full width/i });
     fireEvent.click(fullWidthSwitch);
 
-    expect(contentColumn).toHaveClass('max-w-full');
+    // Content stays bounded at max-w-5xl, never stretched across full monitor
+    expect(contentColumn).toHaveClass('max-w-5xl');
+    expect(contentColumn).not.toHaveClass('max-w-full');
   });
 });

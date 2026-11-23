@@ -701,12 +701,10 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
       data-testid="block-editor-modal-dialog"
       onClick={(e) => e.stopPropagation()}
       style={{ backgroundColor: modalBg }}
-      className={`relative w-full flex flex-col transition-all duration-200 overflow-hidden ${
-        isEmbedded
-          ? 'h-full flex-1 border-none rounded-none shadow-none'
-          : isFullscreen
-            ? 'h-full w-full rounded-none sm:rounded-none shadow-2xl border border-stone-200/80 dark:border-stone-800'
-            : `${isSidebarOpen ? 'max-w-5xl' : 'max-w-3xl'} h-full sm:h-[90vh] sm:rounded-3xl rounded-none shadow-2xl border border-stone-200/80 dark:border-stone-800`
+      className={`relative w-full flex flex-col transition-all duration-200 overflow-hidden shadow-2xl border border-stone-200/80 dark:border-stone-800 ${
+        isFullscreen
+          ? 'h-full w-full rounded-none sm:rounded-none'
+          : `${isSidebarOpen ? 'max-w-5xl' : 'max-w-3xl sm:max-w-4xl'} h-full sm:h-[90vh] sm:rounded-3xl rounded-none`
       }`}
     >
       {/* Modal / Page Header */}
@@ -867,9 +865,11 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
           <div
             data-testid="note-content-column"
             className={`flex-1 flex flex-col w-full p-4 sm:p-8 pb-32 transition-all duration-200 ${
-              isFullWidth
-                ? 'max-w-full px-4 sm:px-8 md:px-16'
-                : 'max-w-4xl mx-auto px-4 sm:px-8'
+              isFullscreen
+                ? isFullWidth
+                  ? 'max-w-5xl mx-auto px-6 sm:px-12'
+                  : 'max-w-4xl mx-auto px-6 sm:px-12'
+                : 'w-full'
             }`}
           >
             {loading ? (
