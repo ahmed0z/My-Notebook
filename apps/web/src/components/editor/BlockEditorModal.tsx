@@ -13,6 +13,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { useSettings } from '../../context/SettingsContext';
 import { InNoteSidebar } from './InNoteSidebar';
 import { NoteActionsMenu } from './NoteActionsMenu';
+import { parseClipboardTableData } from './utils/clipboardTableParser';
 import {
   X,
   Palette,
@@ -291,8 +292,8 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
       });
     } else if (type === 'table') {
       initialContentJson = JSON.stringify({
-        columns: ['Column 1', 'Column 2'],
-        rows: [['', '']]
+        columns: extraContent?.columns || ['Column 1', 'Column 2'],
+        rows: extraContent?.rows || [['', '']]
       });
     } else if (type === 'image') {
       initialContentJson = JSON.stringify({
@@ -629,6 +630,25 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
     handleAddBlock('text');
   };
 
+  const handleCanvasPaste = (e: React.ClipboardEvent) => {
+    const target = e.target as HTMLElement;
+    if (target?.closest && target.closest('table, input, textarea, [data-testid="in-note-sidebar"]')) {
+      return;
+    }
+
+    const textPlain = e.clipboardData.getData('text/plain');
+    const textHtml = e.clipboardData.getData('text/html');
+    const tableData = parseClipboardTableData(textPlain, textHtml);
+
+    if (tableData && tableData.isTable) {
+      e.preventDefault();
+      handleAddBlock('table', {
+        columns: tableData.columns,
+        rows: tableData.rows
+      });
+    }
+  };
+
   const { isDark, getNoteCardColor } = useTheme();
   const modalBg = getNoteCardColor(note.color, isDark);
 
@@ -756,6 +776,7 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
           {/* Scrollable Block List */}
           <div
             data-testid="modal-editor-content-area"
+            onPaste={handleCanvasPaste}
             className={`flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-8 pb-32 flex flex-col ${
               isFullscreen ? 'max-w-7xl mx-auto w-full px-4 sm:px-8' : 'w-full'
             }`}

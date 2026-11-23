@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { TableBlockContent } from '@notebook/shared';
 import { Plus, Trash2, Table } from 'lucide-react';
+import { parseClipboardTableData } from '../utils/clipboardTableParser';
 
 interface TableBlockProps {
   content: TableBlockContent;
@@ -601,7 +602,89 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
 
   const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
     const text = e.clipboardData.getData('text/plain');
-    if (!text) return;
+    const html = e.clipboardData.getData('text/html');
+    if (!text && !html) return;
+
+    const targetEl = e.target as HTMLElement;
+    const targetTd = targetEl?.closest ? targetEl.closest('td') : null;
+    const targetTh = targetEl?.closest ? targetEl.closest('th') : null;
+
+    const startRow = targetTd ? Number(targetTd.getAttribute('data-row-index') ?? 0) : -1;
+    const startCol = targetTd
+      ? Number(targetTd.getAttribute('data-col-index') ?? 0)
+      : (targetTh ? Number(targetTh.getAttribute('data-col-index') ?? 0) : 0);
+
+    const tableData = parseClipboardTableData(text, html);
+    if (tableData && tableData.rawGrid.length > 0) {
+      e.preventDefault();
+      const pasteGrid = tableData.rawGrid;
+      const pasteRowCount = pasteGrid.length;
+      const pasteColCount = pasteGrid[0].length;
+
+      if (startRow === -1) {
+        // Pasted into header
+        const reqCols = Math.max(columns.length, startCol + pasteColCount);
+        const reqRows = Math.max(rows.length, pasteRowCount - 1);
+
+        const newCols = [...columns];
+        while (newCols.length < reqCols) {
+          newCols.push(`Column ${newCols.length + 1}`);
+        }
+        for (let c = 0; c < pasteColCount; c++) {
+          newCols[startCol + c] = pasteGrid[0][c] || newCols[startCol + c];
+        }
+
+        const newRows = rows.map(r => {
+          const rowCopy = [...r];
+          while (rowCopy.length < reqCols) rowCopy.push('');
+          return rowCopy;
+        });
+        while (newRows.length < reqRows) {
+          newRows.push(new Array(reqCols).fill(''));
+        }
+
+        for (let r = 1; r < pasteRowCount; r++) {
+          for (let c = 0; c < pasteColCount; c++) {
+            newRows[r - 1][startCol + c] = pasteGrid[r][c];
+          }
+        }
+
+        onChange({ ...content, columns: newCols, rows: newRows });
+      } else {
+        // Pasted into regular body cell
+        const actualStartRow = Math.max(0, startRow);
+        const actualStartCol = Math.max(0, startCol);
+
+        const reqCols = Math.max(columns.length, actualStartCol + pasteColCount);
+        const reqRows = Math.max(rows.length, actualStartRow + pasteRowCount);
+
+        const newCols = [...columns];
+        while (newCols.length < reqCols) {
+          newCols.push(`Column ${newCols.length + 1}`);
+        }
+
+        const newRows = rows.map(r => {
+          const rowCopy = [...r];
+          while (rowCopy.length < reqCols) rowCopy.push('');
+          return rowCopy;
+        });
+        while (newRows.length < reqRows) {
+          newRows.push(new Array(reqCols).fill(''));
+        }
+
+        for (let r = 0; r < pasteRowCount; r++) {
+          for (let c = 0; c < pasteColCount; c++) {
+            newRows[actualStartRow + r][actualStartCol + c] = pasteGrid[r][c];
+          }
+        }
+
+        onChange({ ...content, columns: newCols, rows: newRows });
+      }
+
+      setPasted(true);
+      setTimeout(() => setPasted(false), 2000);
+      return;
+    }
 
     // Split lines, ignoring trailing empty newline
     const rawLines = text.split(/\r?\n/).filter((line, idx, arr) => {
@@ -687,6 +770,7 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
                 return (
                   <th
                     key={ci}
+                    data-col-index={ci}
                     style={{ width: `${activeColWidths[ci]}px` }}
                     onMouseDown={(e) => handleCellMouseDown(e, -1, ci)}
                     onMouseEnter={() => handleCellMouseEnter(-1, ci)}
@@ -781,6 +865,8 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
                     return (
                       <td
                         key={ci}
+                        data-row-index={ri}
+                        data-col-index={ci}
                         style={{ width: `${activeColWidths[ci]}px`, height: `${rowH}px` }}
                         onMouseDown={(e) => handleCellMouseDown(e, ri, ci)}
                         onMouseEnter={() => handleCellMouseEnter(ri, ci)}
