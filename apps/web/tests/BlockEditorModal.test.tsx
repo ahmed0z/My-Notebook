@@ -52,6 +52,53 @@ describe('BlockEditorModal', () => {
   beforeEach(() => {
     localStorage.clear();
   });
+
+  it('renders floating card with canvas blur backdrop in compact mode and dismisses on backdrop click', () => {
+    const handleClose = vi.fn();
+    render(
+      <BlockEditorModal
+        note={{ id: 'note-1', title: 'Test Note', color: 'default', spaceId: 'space-1', position: 0, isPinned: false, isArchived: false, createdAt: '', updatedAt: '', blocks: [] }}
+        onClose={handleClose}
+        onNoteUpdated={() => {}}
+      />
+    );
+
+    const backdrop = screen.getByTestId('modal-editor-backdrop');
+    expect(backdrop).toHaveClass('backdrop-blur-sm');
+    expect(backdrop).toHaveClass('absolute');
+
+    const card = screen.getByTestId('block-editor-modal-dialog');
+    expect(card).toHaveClass('rounded-2xl');
+    expect(card).toHaveClass('max-w-4xl');
+
+    // Clicking backdrop triggers onClose
+    fireEvent.click(backdrop);
+    expect(handleClose).toHaveBeenCalled();
+  });
+
+  it('keeps content column centered when toggling full mode unless full width is explicitly enabled', async () => {
+    render(
+      <BlockEditorModal
+        note={{ id: 'note-1', title: 'Test Note', color: 'default', spaceId: 'space-1', position: 0, isPinned: false, isArchived: false, createdAt: '', updatedAt: '', blocks: [] }}
+        onClose={() => {}}
+        onNoteUpdated={() => {}}
+      />
+    );
+
+    // Toggle fullscreen mode
+    const fullscreenBtn = screen.getByRole('button', { name: /full screen/i });
+    fireEvent.click(fullscreenBtn);
+
+    // Modal dialog is now full-bleed
+    const dialog = screen.getByTestId('block-editor-modal-dialog');
+    expect(dialog).toHaveClass('h-full');
+    expect(dialog).not.toHaveClass('rounded-2xl');
+
+    // Content column remains readable max-w-4xl by default
+    const contentCol = screen.getByTestId('note-content-column');
+    expect(contentCol).toHaveClass('max-w-4xl');
+    expect(contentCol).not.toHaveClass('max-w-full');
+  });
   it('renders modal with note title and block controls', async () => {
     const note: NoteDto = {
       id: 'n1',
@@ -372,7 +419,7 @@ describe('BlockEditorModal', () => {
     expect(ApiClient.deleteBlock).toHaveBeenCalledWith('b-single');
   });
 
-  it('renders wide full mode footprint without max-w-4xl constraint', async () => {
+  it('renders wide full mode footprint without modal card constraints', async () => {
     const note: NoteDto = {
       id: 'n1',
       title: 'Wide Mode Note',
@@ -389,15 +436,18 @@ describe('BlockEditorModal', () => {
     const fullscreenBtn = screen.getByTitle('Full screen');
     fireEvent.click(fullscreenBtn);
 
-    const contentContainer = screen.getByTestId('modal-editor-content-area');
-    expect(contentContainer).toHaveClass('max-w-7xl');
-    expect(contentContainer).not.toHaveClass('max-w-4xl');
+    const dialog = screen.getByTestId('block-editor-modal-dialog');
+    expect(dialog).toHaveClass('h-full');
+    expect(dialog).toHaveClass('w-full');
+    expect(dialog).toHaveClass('rounded-none');
+    expect(dialog).not.toHaveClass('rounded-2xl');
   });
 
-  it('renders in-note sidebar side-by-side with editor in compact mode without overlap', async () => {
+  it('omits redundant in-note sidebar and delegates navigation to master sidebar toggle', async () => {
+    const handleToggleMaster = vi.fn();
     const note: NoteDto = {
       id: 'n1',
-      title: 'Compact Side-by-Side Note',
+      title: 'Sole Navigation Note',
       color: '#ffffff',
       position: 0,
       isPinned: false,
@@ -407,13 +457,19 @@ describe('BlockEditorModal', () => {
       blocks: []
     };
 
-    render(<BlockEditorModal note={note} onClose={() => {}} onNoteUpdated={() => {}} />);
-    const sidebarToggle = screen.getByTitle('Toggle folder sidebar');
-    fireEvent.click(sidebarToggle);
+    render(
+      <BlockEditorModal
+        note={note}
+        onClose={() => {}}
+        onNoteUpdated={() => {}}
+        onToggleMasterSidebar={handleToggleMaster}
+      />
+    );
 
-    const modalDialog = screen.getByTestId('block-editor-modal-dialog');
-    expect(modalDialog).toHaveClass('max-w-5xl');
-    expect(screen.getByTestId('in-note-sidebar')).toBeInTheDocument();
+    expect(screen.queryByTestId('in-note-sidebar')).not.toBeInTheDocument();
+    const masterSidebarToggle = screen.getByTitle(/expand sidebar/i);
+    fireEvent.click(masterSidebarToggle);
+    expect(handleToggleMaster).toHaveBeenCalled();
   });
 
   it('correctly resets blocks when switching to another note with fewer blocks', async () => {
@@ -530,19 +586,19 @@ describe('BlockEditorModal', () => {
     );
 
     const contentColumn = screen.getByTestId('note-content-column');
-    // Initially in compact mode: centered in middle like v0.0.1
+    // Initially in compact mode: centered in middle
     expect(contentColumn).toHaveClass('max-w-4xl');
     expect(contentColumn).toHaveClass('mx-auto');
 
-    // Enter full width
+    // Toggling fullscreen changes presentation mode, not content width
     const fullscreenBtn = screen.getByTitle('Full screen');
     fireEvent.click(fullscreenBtn);
 
-    // In full width mode: spans full canvas and moves items to left with padding
-    expect(contentColumn).toHaveClass('max-w-full');
     expect(screen.getByTitle('Exit full screen')).toBeInTheDocument();
+    expect(contentColumn).toHaveClass('max-w-4xl');
+    expect(contentColumn).not.toHaveClass('max-w-full');
 
-    // Toggle off: shrinks back into middle
+    // Toggle off fullscreen: shrinks back to compact card
     fireEvent.click(screen.getByTitle('Exit full screen'));
     expect(contentColumn).toHaveClass('max-w-4xl');
     expect(contentColumn).toHaveClass('mx-auto');
@@ -554,8 +610,45 @@ describe('BlockEditorModal', () => {
     const fullWidthSwitch = screen.getByRole('switch', { name: /toggle full width/i });
     fireEvent.click(fullWidthSwitch);
 
-    // In full width mode again
-    expect(contentColumn).toHaveClass('max-w-full');
+    // In full width mode: spans full canvas
+    expect(screen.getByTestId('note-content-column')).toHaveClass('max-w-full');
+
+    // Toggle off via 3-dot menu switch: shrinks back into middle
+    fireEvent.click(fullWidthSwitch);
+    expect(screen.getByTestId('note-content-column')).toHaveClass('max-w-4xl');
+    expect(screen.getByTestId('note-content-column')).toHaveClass('mx-auto');
+  });
+
+  it('closes modal on Escape in compact mode, and exits fullscreen on Escape in fullscreen mode', () => {
+    const handleClose = vi.fn();
+    const note: NoteDto = {
+      id: 'n1',
+      title: 'Escape Note',
+      color: '#ffffff',
+      position: 0,
+      isPinned: false,
+      isArchived: false,
+      createdAt: '',
+      updatedAt: '',
+      blocks: []
+    };
+
+    render(<BlockEditorModal note={note} onClose={handleClose} onNoteUpdated={() => {}} />);
+
+    // In compact mode, pressing Escape calls onClose
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(handleClose).toHaveBeenCalledTimes(1);
+
+    // Enter fullscreen mode
+    handleClose.mockClear();
+    const fullscreenBtn = screen.getByTitle('Full screen');
+    fireEvent.click(fullscreenBtn);
+    expect(screen.getByTitle('Exit full screen')).toBeInTheDocument();
+
+    // Pressing Escape in fullscreen exits fullscreen without calling onClose
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(handleClose).not.toHaveBeenCalled();
+    expect(screen.getByTitle('Full screen')).toBeInTheDocument();
   });
 
   it('resets blocks and loads new note immediately when note prop changes', async () => {

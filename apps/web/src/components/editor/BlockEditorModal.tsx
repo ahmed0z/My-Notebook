@@ -11,7 +11,6 @@ import { ColorPicker } from '../ColorPicker';
 import { SlashCommandOption } from './SlashCommandMenu';
 import { useTheme } from '../../context/ThemeContext';
 import { useSettings } from '../../context/SettingsContext';
-import { InNoteSidebar } from './InNoteSidebar';
 import { NoteActionsMenu } from './NoteActionsMenu';
 import { parseClipboardTableData } from './utils/clipboardTableParser';
 import {
@@ -70,24 +69,23 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
   const [loading, setLoading] = useState(true);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const { defaultView } = useSettings();
-  const [isFullWidth, setIsFullWidth] = useState(() => {
+  const [isFullscreen, setIsFullscreen] = useState(() => {
     if (defaultView === 'fullscreen') return true;
     try {
-      const saved = localStorage.getItem('notebook_note_full_width');
-      if (saved !== null) return saved === 'true';
-      return false;
+      return localStorage.getItem('notebook_note_fullscreen') === 'true';
     } catch {
       return false;
     }
   });
-  const [isFullscreen, setIsFullscreen] = useState(isFullWidth);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+
+  const [isFullWidth, setIsFullWidth] = useState(() => {
     try {
-      return localStorage.getItem('notebook_in_note_sidebar_open') === 'true';
+      return localStorage.getItem('notebook_note_full_width') === 'true';
     } catch {
       return false;
     }
   });
+
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [activeMenuBlockId, setActiveMenuBlockId] = useState<string | null>(null);
@@ -96,21 +94,25 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
 
   useEffect(() => {
     if (defaultView === 'fullscreen') {
-      setIsFullWidth(true);
       setIsFullscreen(true);
     }
   }, [defaultView]);
 
+  const handleToggleFullscreen = () => {
+    setIsFullscreen((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('notebook_note_fullscreen', String(next));
+      } catch {}
+      return next;
+    });
+  };
+
   const handleToggleFullWidth = (val: boolean) => {
     setIsFullWidth(val);
-    setIsFullscreen(val);
     try {
       localStorage.setItem('notebook_note_full_width', String(val));
     } catch {}
-  };
-
-  const handleToggleFullscreen = () => {
-    handleToggleFullWidth(!isFullWidth);
   };
 
   const blockSaveTimers = useRef<Record<string, any>>({});
@@ -130,14 +132,19 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
       if (e.key === 'Escape') {
         if (activeMenuBlockId) {
           setActiveMenuBlockId(null);
-        } else if (isFullWidth) {
-          handleToggleFullWidth(false);
+        } else if (isFullscreen) {
+          setIsFullscreen(false);
+          try {
+            localStorage.setItem('notebook_note_fullscreen', 'false');
+          } catch {}
+        } else {
+          onClose();
         }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isFullWidth, activeMenuBlockId]);
+  }, [isFullscreen, activeMenuBlockId, onClose]);
 
   // Load full note with blocks
   useEffect(() => {
@@ -286,14 +293,6 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
     setNote(updated);
     onNoteUpdated(updated);
     saveNoteMeta({ isPinned: updatedPinned });
-  };
-
-  const toggleSidebar = () => {
-    setIsSidebarOpen(prev => {
-      const next = !prev;
-      try { localStorage.setItem('notebook_in_note_sidebar_open', String(next)); } catch {}
-      return next;
-    });
   };
 
   const handleArchiveCurrentNote = async () => {
@@ -675,7 +674,7 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
 
   const handleCanvasPaste = (e: React.ClipboardEvent) => {
     const target = e.target as HTMLElement;
-    if (target?.closest && target.closest('table, [data-testid="in-note-sidebar"]')) {
+    if (target?.closest && target.closest('table')) {
       return;
     }
 
@@ -711,24 +710,13 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
   const modalBg = getNoteCardColor(note.color, isDark);
   const noteSpace = spacesList.find(s => s.id === note.spaceId);
 
-  const modalContent = (
-    <div
-      data-testid="block-editor-modal-dialog"
-      onClick={(e) => e.stopPropagation()}
-      style={{ backgroundColor: modalBg }}
-      className={`relative w-full flex flex-col transition-all duration-200 overflow-hidden ${
-        isEmbedded
-          ? 'h-full rounded-none border-0 shadow-none'
-          : isFullscreen
-            ? 'h-full w-full rounded-none sm:rounded-none shadow-2xl border border-stone-200/80 dark:border-stone-800'
-            : `${isSidebarOpen ? 'max-w-5xl' : 'max-w-3xl sm:max-w-4xl'} h-full sm:h-[90vh] sm:rounded-3xl rounded-none shadow-2xl border border-stone-200/80 dark:border-stone-800`
-      }`}
-    >
+  const dialogContent = (
+    <>
       {/* Modal / Page Header */}
       <div className="flex items-center justify-between p-4 sm:px-8 border-b border-stone-200/40 dark:border-stone-800/60 transition-colors shrink-0">
         <div className="flex items-center flex-1 min-w-0 mr-2">
-          {/* In embedded mode, button to toggle master sidebar */}
-          {isEmbedded && onToggleMasterSidebar && (
+          {/* Button to toggle master sidebar */}
+          {onToggleMasterSidebar && (
             <button
               type="button"
               onClick={onToggleMasterSidebar}
@@ -736,21 +724,6 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
               aria-label={isMasterSidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
               className={`p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 transition mr-2 shrink-0 ${
                 isMasterSidebarOpen ? 'text-amber-600 dark:text-amber-400' : 'text-stone-500 dark:text-stone-400'
-              }`}
-            >
-              <PanelLeft className="w-4 h-4" />
-            </button>
-          )}
-
-          {/* Standalone in-note sidebar toggle */}
-          {!isEmbedded && (
-            <button
-              type="button"
-              onClick={toggleSidebar}
-              title="Toggle folder sidebar"
-              aria-label="Toggle folder sidebar"
-              className={`p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 transition mr-2 shrink-0 ${
-                isSidebarOpen ? 'text-amber-600 dark:text-amber-400 bg-black/5 dark:bg-white/10' : 'text-stone-500 dark:text-stone-400'
               }`}
             >
               <PanelLeft className="w-4 h-4" />
@@ -840,11 +813,11 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
           <button
             type="button"
             onClick={handleToggleFullscreen}
-            title={isFullWidth ? 'Exit full screen' : 'Full screen'}
-            aria-label={isFullWidth ? 'Exit full screen' : 'Full screen'}
+            title={isFullscreen ? 'Exit full screen' : 'Full screen'}
+            aria-label={isFullscreen ? 'Exit full screen' : 'Full screen'}
             className="p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 transition"
           >
-            {isFullWidth ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
 
           {/* Close */}
@@ -860,26 +833,13 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
         </div>
       </div>
 
-      {/* Layout Body: In-Note Sidebar + Content Area */}
+      {/* Layout Body: Content Area */}
       <div className="flex-1 flex overflow-hidden min-h-0 w-full h-full">
-        {!isEmbedded && (
-          <InNoteSidebar
-            isOpen={isSidebarOpen}
-            onToggle={toggleSidebar}
-            currentNoteId={note.id}
-            spaces={spacesList}
-            notes={propNotes && propNotes.length > 0 ? propNotes : allNotes}
-            onSelectNote={handleOpenNote}
-          />
-        )}
-
         {/* Scrollable Block List: spans full available width so scrollbar is at the edge */}
         <div
           data-testid="modal-editor-content-area"
           onPaste={handleCanvasPaste}
-          className={`flex-1 min-w-0 w-full h-full overflow-y-auto custom-scrollbar flex flex-col ${
-            !isEmbedded && isFullscreen ? 'max-w-7xl' : ''
-          }`}
+          className="flex-1 min-w-0 w-full h-full overflow-y-auto custom-scrollbar flex flex-col"
         >
           <div
             data-testid="note-content-column"
@@ -1185,19 +1145,36 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
             </div>
           </div>
         </div>
-      </div>
+    </>
   );
 
-  if (isEmbedded) {
-    return modalContent;
+  if (isFullscreen || isEmbedded) {
+    return (
+      <div
+        data-testid="block-editor-modal-dialog"
+        onClick={(e) => e.stopPropagation()}
+        style={{ backgroundColor: modalBg }}
+        className="relative w-full h-full rounded-none border-0 shadow-none flex flex-col overflow-hidden transition-all duration-200"
+      >
+        {dialogContent}
+      </div>
+    );
   }
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm transition-all"
+      data-testid="modal-editor-backdrop"
+      className="absolute inset-0 z-30 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/40 backdrop-blur-sm transition-all"
       onClick={onClose}
     >
-      {modalContent}
+      <div
+        data-testid="block-editor-modal-dialog"
+        onClick={(e) => e.stopPropagation()}
+        style={{ backgroundColor: modalBg }}
+        className="relative w-full max-w-4xl h-[90vh] rounded-2xl shadow-2xl border border-stone-200/80 dark:border-stone-800 flex flex-col overflow-hidden transition-all duration-200"
+      >
+        {dialogContent}
+      </div>
     </div>
   );
 };
