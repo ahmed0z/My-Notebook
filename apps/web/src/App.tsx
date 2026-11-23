@@ -198,13 +198,52 @@ export const AppContent: React.FC = () => {
       />
 
       {/* Main Workspace Canvas */}
-      <div className={`flex-1 h-full min-w-0 flex flex-col overflow-hidden transition-all duration-300 ease-in-out ${sideMenuOpen ? 'md:pl-64' : 'pl-0'}`}>
-        {selectedNote ? (
+      <div className={`flex-1 h-full min-w-0 relative flex flex-col overflow-hidden transition-all duration-300 ease-in-out ${sideMenuOpen ? 'md:pl-64' : 'pl-0'}`}>
+        <div className="flex-1 w-full h-full overflow-y-auto custom-scrollbar">
+          {activePage === 'home' && (
+            <HomePage
+              notes={notes}
+              loading={notesLoading}
+              onRefresh={loadNotes}
+              onSelectNote={(note) => setSelectedNote(note)}
+              onNoteCreated={handleNoteCreated}
+              onNoteUpdated={handleNoteUpdated}
+              onNoteDeleted={handleDeleteNote}
+              onToggleSideMenu={toggleSideMenu}
+              activeSpaceId={activeSpaceId}
+              spaces={spaces}
+              onSelectSpace={setActiveSpaceId}
+              onMoveNote={handleMoveNote}
+            />
+          )}
+
+          {activePage === 'archive' && (
+            <ArchivePage
+              notes={notes}
+              loading={notesLoading}
+              onRefresh={loadNotes}
+              onSelectNote={(note) => setSelectedNote(note)}
+              onNoteUpdated={handleNoteUpdated}
+              onNoteDeleted={handleDeleteNote}
+              onBack={() => setActivePage('home')}
+              onToggleSideMenu={toggleSideMenu}
+            />
+          )}
+
+          {activePage === 'settings' && (
+            <SettingsPage
+              onBack={() => setActivePage('home')}
+              onToggleSideMenu={toggleSideMenu}
+            />
+          )}
+        </div>
+
+        {/* Note Editor Modal layered over workspace canvas */}
+        {selectedNote && (
           <BlockEditorModal
             note={selectedNote}
             notes={notes}
             spaces={spaces}
-            isEmbedded={true}
             isMasterSidebarOpen={sideMenuOpen}
             onToggleMasterSidebar={toggleSideMenu}
             onClose={() => setSelectedNote(null)}
@@ -219,45 +258,6 @@ export const AppContent: React.FC = () => {
               }
             }}
           />
-        ) : (
-          <div className="flex-1 w-full h-full overflow-y-auto custom-scrollbar">
-            {activePage === 'home' && (
-              <HomePage
-                notes={notes}
-                loading={notesLoading}
-                onRefresh={loadNotes}
-                onSelectNote={(note) => setSelectedNote(note)}
-                onNoteCreated={handleNoteCreated}
-                onNoteUpdated={handleNoteUpdated}
-                onNoteDeleted={handleDeleteNote}
-                onToggleSideMenu={toggleSideMenu}
-                activeSpaceId={activeSpaceId}
-                spaces={spaces}
-                onSelectSpace={setActiveSpaceId}
-                onMoveNote={handleMoveNote}
-              />
-            )}
-
-            {activePage === 'archive' && (
-              <ArchivePage
-                notes={notes}
-                loading={notesLoading}
-                onRefresh={loadNotes}
-                onSelectNote={(note) => setSelectedNote(note)}
-                onNoteUpdated={handleNoteUpdated}
-                onNoteDeleted={handleDeleteNote}
-                onBack={() => setActivePage('home')}
-                onToggleSideMenu={toggleSideMenu}
-              />
-            )}
-
-            {activePage === 'settings' && (
-              <SettingsPage
-                onBack={() => setActivePage('home')}
-                onToggleSideMenu={toggleSideMenu}
-              />
-            )}
-          </div>
         )}
       </div>
     </div>

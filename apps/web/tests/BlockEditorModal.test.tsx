@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BlockEditorModal } from '../src/components/editor/BlockEditorModal';
@@ -556,5 +556,30 @@ describe('BlockEditorModal', () => {
 
     // In full width mode again
     expect(contentColumn).toHaveClass('max-w-full');
+  });
+
+  it('resets blocks and loads new note immediately when note prop changes', async () => {
+    const note1 = { id: 'note-1', title: 'First Note', color: 'default', spaceId: 'space-1', isPinned: false, isArchived: false, createdAt: '', updatedAt: '', blocks: [] };
+    const note2 = { id: 'note-2', title: 'Second Note', color: 'default', spaceId: 'space-1', isPinned: false, isArchived: false, createdAt: '', updatedAt: '', blocks: [] };
+
+    (ApiClient.getNote as any)
+      .mockResolvedValueOnce(note1)
+      .mockResolvedValueOnce(note2);
+
+    const { rerender } = render(
+      <BlockEditorModal note={note1} onClose={() => {}} onNoteUpdated={() => {}} />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('First Note')).toBeInTheDocument();
+    });
+
+    rerender(
+      <BlockEditorModal note={note2} onClose={() => {}} onNoteUpdated={() => {}} />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Second Note')).toBeInTheDocument();
+    });
   });
 });
