@@ -9,7 +9,8 @@ import {
   Folder,
   ChevronRight,
   ChevronLeft,
-  Check
+  Check,
+  Maximize2
 } from 'lucide-react';
 
 export interface NoteActionsMenuProps {
@@ -18,6 +19,8 @@ export interface NoteActionsMenuProps {
   onArchiveToggle: () => void;
   onDelete: () => void;
   onMoveToSpace: (spaceId: string | null) => void;
+  isFullWidth?: boolean;
+  onToggleFullWidth?: (fullWidth: boolean) => void;
 }
 
 export const NoteActionsMenu: React.FC<NoteActionsMenuProps> = ({
@@ -25,7 +28,9 @@ export const NoteActionsMenu: React.FC<NoteActionsMenuProps> = ({
   spaces = [],
   onArchiveToggle,
   onDelete,
-  onMoveToSpace
+  onMoveToSpace,
+  isFullWidth = false,
+  onToggleFullWidth
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [showFolderSubmenu, setShowFolderSubmenu] = useState(false);
@@ -102,6 +107,49 @@ export const NoteActionsMenu: React.FC<NoteActionsMenuProps> = ({
         >
           {!showFolderSubmenu ? (
             <>
+              {/* Notion-style Full Width Toggle */}
+              {onToggleFullWidth && (
+                <>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onToggleFullWidth(!isFullWidth)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onToggleFullWidth(!isFullWidth);
+                      }
+                    }}
+                    className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl hover:bg-stone-100 dark:hover:bg-stone-800/80 transition text-left cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Maximize2 className="w-4 h-4 text-stone-500 shrink-0" />
+                      <span>Full width</span>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-label="Toggle full width"
+                      aria-checked={isFullWidth}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleFullWidth(!isFullWidth);
+                      }}
+                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        isFullWidth ? 'bg-amber-600 dark:bg-amber-500' : 'bg-stone-300 dark:bg-stone-700'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                          isFullWidth ? 'translate-x-4' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                  <div className="h-px bg-stone-100 dark:bg-stone-800 my-1" />
+                </>
+              )}
+
               {/* Change Folder */}
               <button
                 type="button"

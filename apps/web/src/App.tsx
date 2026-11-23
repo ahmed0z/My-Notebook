@@ -21,7 +21,37 @@ export const AppContent: React.FC = () => {
   const [notesLoading, setNotesLoading] = useState(true);
   const [selectedNote, setSelectedNote] = useState<NoteDto | null>(null);
   const [activePage, setActivePage] = useState<'home' | 'archive' | 'settings'>('home');
-  const [sideMenuOpen, setSideMenuOpen] = useState(false);
+  const [sideMenuOpen, setSideMenuOpen] = useState(() => {
+    try {
+      const saved = localStorage.getItem('notebook_master_sidebar_open');
+      if (saved !== null) return saved === 'true';
+      return typeof window !== 'undefined' && window.innerWidth >= 768;
+    } catch {
+      return true;
+    }
+  });
+
+  const toggleSideMenu = useCallback(() => {
+    setSideMenuOpen(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('notebook_master_sidebar_open', String(next));
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+\ or Cmd+\ toggles master sidebar (Notion convention)
+      if ((e.ctrlKey || e.metaKey) && e.key === '\\') {
+        e.preventDefault();
+        toggleSideMenu();
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [toggleSideMenu]);
 
   const loadNotes = useCallback(async () => {
     try {
@@ -128,88 +158,110 @@ export const AppContent: React.FC = () => {
     return <LoginPage />;
   }
 
-  const toggleSideMenu = () => setSideMenuOpen(prev => !prev);
+  const handleCreateNoteInSpace = async (spaceId?: string | null) => {
+    try {
+      const newNote = await ApiClient.createNote('Untitled', undefined, spaceId || activeSpaceId || undefined);
+      handleNoteCreated(newNote);
+    } catch (err) {
+      console.error('Failed to create note in space', err);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-stone-50 dark:bg-stone-950 transition-colors">
+    <div className="h-screen w-screen overflow-hidden bg-stone-50 dark:bg-stone-950 transition-colors flex">
+      {/* Notion-style Persistent Master Sidebar */}
       <SideMenu
         isOpen={sideMenuOpen}
         onClose={() => setSideMenuOpen(false)}
         onNavigate={(page) => {
           setActivePage(page);
-          setSideMenuOpen(false);
+          setSelectedNote(null);
         }}
         currentPage={activePage}
         spaces={spaces}
+        notes={notes}
         activeSpaceId={activeSpaceId}
+        selectedNoteId={selectedNote?.id || null}
         onSelectSpace={(spaceId) => {
           setActiveSpaceId(spaceId);
           setActivePage('home');
+          setSelectedNote(null);
         }}
+        onSelectNote={(note) => {
+          setSelectedNote(note);
+          setActivePage('home');
+        }}
+        onCreateNote={handleCreateNoteInSpace}
         onCreateSpace={handleCreateSpace}
         onUpdateSpace={handleUpdateSpace}
         onDeleteSpace={handleDeleteSpace}
       />
 
-      <div className={`transition-all duration-300 ease-in-out ${sideMenuOpen ? 'md:pl-64' : 'pl-0'}`}>
-        {activePage === 'home' && (
-          <HomePage
+      {/* Main Workspace Canvas */}
+      <div className={`flex-1 h-full min-w-0 flex flex-col overflow-hidden transition-all duration-300 ease-in-out ${sideMenuOpen ? 'md:pl-64' : 'pl-0'}`}>
+        {selectedNote ? (
+          <BlockEditorModal
+            note={selectedNote}
             notes={notes}
-            loading={notesLoading}
-            onRefresh={loadNotes}
-            onSelectNote={(note) => setSelectedNote(note)}
-            onNoteCreated={handleNoteCreated}
-            onNoteUpdated={handleNoteUpdated}
-            onNoteDeleted={handleDeleteNote}
-            onToggleSideMenu={toggleSideMenu}
-            activeSpaceId={activeSpaceId}
             spaces={spaces}
-            onSelectSpace={setActiveSpaceId}
-            onMoveNote={handleMoveNote}
-          />
-        )}
-
-        {activePage === 'archive' && (
-          <ArchivePage
-            notes={notes}
-            loading={notesLoading}
-            onRefresh={loadNotes}
-            onSelectNote={(note) => setSelectedNote(note)}
+            isEmbedded={true}
+            isMasterSidebarOpen={sideMenuOpen}
+            onToggleMasterSidebar={toggleSideMenu}
+            onClose={() => {
+              setSelectedNote(null);
+            }}
             onNoteUpdated={handleNoteUpdated}
-            onNoteDeleted={handleDeleteNote}
-            onBack={() => setActivePage('home')}
-            onToggleSideMenu={toggleSideMenu}
+            onDeleteNote={handleDeleteNote}
+            onOpenNote={async (targetId) => {
+              try {
+                const fullNote = await ApiClient.getNote(targetId);
+                setSelectedNote(fullNote);
+              } catch (err) {
+                console.error('Failed to open linked note', err);
+              }
+            }}
           />
-        )}
+        ) : (
+          <div className="flex-1 w-full h-full overflow-y-auto custom-scrollbar">
+            {activePage === 'home' && (
+              <HomePage
+                notes={notes}
+                loading={notesLoading}
+                onRefresh={loadNotes}
+                onSelectNote={(note) => setSelectedNote(note)}
+                onNoteCreated={handleNoteCreated}
+                onNoteUpdated={handleNoteUpdated}
+                onNoteDeleted={handleDeleteNote}
+                onToggleSideMenu={toggleSideMenu}
+                activeSpaceId={activeSpaceId}
+                spaces={spaces}
+                onSelectSpace={setActiveSpaceId}
+                onMoveNote={handleMoveNote}
+              />
+            )}
 
-        {activePage === 'settings' && (
-          <SettingsPage
-            onBack={() => setActivePage('home')}
-            onToggleSideMenu={toggleSideMenu}
-          />
+            {activePage === 'archive' && (
+              <ArchivePage
+                notes={notes}
+                loading={notesLoading}
+                onRefresh={loadNotes}
+                onSelectNote={(note) => setSelectedNote(note)}
+                onNoteUpdated={handleNoteUpdated}
+                onNoteDeleted={handleDeleteNote}
+                onBack={() => setActivePage('home')}
+                onToggleSideMenu={toggleSideMenu}
+              />
+            )}
+
+            {activePage === 'settings' && (
+              <SettingsPage
+                onBack={() => setActivePage('home')}
+                onToggleSideMenu={toggleSideMenu}
+              />
+            )}
+          </div>
         )}
       </div>
-
-      {selectedNote && (
-        <BlockEditorModal
-          note={selectedNote}
-          notes={notes}
-          spaces={spaces}
-          onClose={() => {
-            setSelectedNote(null);
-          }}
-          onNoteUpdated={handleNoteUpdated}
-          onDeleteNote={handleDeleteNote}
-          onOpenNote={async (targetId) => {
-            try {
-              const fullNote = await ApiClient.getNote(targetId);
-              setSelectedNote(fullNote);
-            } catch (err) {
-              console.error('Failed to open linked note', err);
-            }
-          }}
-        />
-      )}
     </div>
   );
 };

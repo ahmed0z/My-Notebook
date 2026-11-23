@@ -1,6 +1,17 @@
-import React from 'react';
-import { StickyNote, Archive, Settings, ChevronLeft } from 'lucide-react';
-import { SpaceDto } from '@notebook/shared';
+import React, { useState } from 'react';
+import {
+  StickyNote,
+  Archive,
+  Settings,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  Folder,
+  FolderOpen,
+  FileText,
+  Plus
+} from 'lucide-react';
+import { SpaceDto, NoteDto } from '@notebook/shared';
 import { SpaceSelector } from './SpaceSelector';
 import { useAuth } from '../context/AuthContext';
 
@@ -10,11 +21,15 @@ export interface SideMenuProps {
   onNavigate: (page: 'home' | 'archive' | 'settings') => void;
   currentPage: 'home' | 'archive' | 'settings';
   spaces?: SpaceDto[];
+  notes?: NoteDto[];
   activeSpaceId?: string | null;
+  selectedNoteId?: string | null;
   onSelectSpace?: (spaceId: string | null) => void;
+  onSelectNote?: (note: NoteDto) => void;
   onCreateSpace?: (name: string, parentSpaceId?: string | null) => Promise<void>;
   onUpdateSpace?: (id: string, updates: { name?: string; parentSpaceId?: string | null }) => Promise<void>;
   onDeleteSpace?: (id: string) => Promise<void>;
+  onCreateNote?: (spaceId?: string | null) => void;
 }
 
 interface NavItem {
@@ -29,22 +44,180 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'settings', label: 'Settings', icon: Settings }
 ];
 
+interface SpaceNode {
+  space: SpaceDto;
+  children: SpaceNode[];
+}
+
+function buildSpaceTree(spaces: SpaceDto[]): SpaceNode[] {
+  const map = new Map<string, SpaceNode>();
+  for (const s of spaces) {
+    map.set(s.id, { space: s, children: [] });
+  }
+  const roots: SpaceNode[] = [];
+  for (const s of spaces) {
+    const node = map.get(s.id)!;
+    if (s.parentSpaceId && map.has(s.parentSpaceId)) {
+      map.get(s.parentSpaceId)!.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+  return roots;
+}
+
 export const SideMenu: React.FC<SideMenuProps> = ({
   isOpen,
   onClose,
   onNavigate,
   currentPage,
   spaces = [],
+  notes = [],
   activeSpaceId = null,
+  selectedNoteId = null,
   onSelectSpace,
+  onSelectNote,
   onCreateSpace,
   onUpdateSpace,
-  onDeleteSpace
+  onDeleteSpace,
+  onCreateNote
 }) => {
   const { username, avatarUrl } = useAuth();
+  const [collapsedFolderIds, setCollapsedFolderIds] = useState<Set<string>>(new Set());
+
+  const toggleFolder = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCollapsedFolderIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const activeNotes = notes.filter(n => !n.isArchived);
+  const tree = buildSpaceTree(spaces);
+  const unassignedNotes = activeNotes.filter(n => !n.spaceId);
+
+  const handleNoteClick = (note: NoteDto) => {
+    if (onSelectNote) {
+      onSelectNote(note);
+    }
+    // Only close drawer on mobile viewports (< 768px)
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      onClose();
+    }
+  };
+
+  const handleSpaceClick = (spaceId: string | null) => {
+    if (onSelectSpace) {
+      onSelectSpace(spaceId);
+      onNavigate('home');
+    }
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      onClose();
+    }
+  };
+
+  const renderNoteItem = (n: NoteDto, depth: number) => {
+    const isActive = n.id === selectedNoteId;
+    return (
+      <button
+        key={n.id}
+        type="button"
+        onClick={() => handleNoteClick(n)}
+        style={{ paddingLeft: `${(depth + 1) * 14 + 10}px` }}
+        className={`w-full flex items-center gap-2 py-1.5 pr-2.5 rounded-xl text-xs transition text-left group ${
+          isActive
+            ? 'bg-amber-100/90 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 font-semibold shadow-xs'
+            : 'text-stone-600 dark:text-stone-400 hover:bg-stone-200/50 dark:hover:bg-stone-800/60 hover:text-stone-900 dark:hover:text-stone-100'
+        }`}
+      >
+        <FileText className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-amber-600 dark:text-amber-400' : 'text-stone-400 group-hover:text-stone-600 dark:group-hover:text-stone-300'}`} />
+        <span className="truncate flex-1">{n.title || 'Untitled Note'}</span>
+      </button>
+    );
+  };
+
+  const renderSpaceNode = (node: SpaceNode, depth = 0) => {
+    const isCollapsed = collapsedFolderIds.has(node.space.id);
+    const folderNotes = activeNotes.filter(n => n.spaceId === node.space.id);
+    const isSpaceActive = activeSpaceId === node.space.id;
+
+    return (
+      <div key={node.space.id} className="space-y-0.5">
+        <div
+          style={{ paddingLeft: `${depth * 12 + 8}px` }}
+          className={`group flex items-center justify-between py-1.5 pr-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+            isSpaceActive && !selectedNoteId
+              ? 'bg-stone-200/80 dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-semibold'
+              : 'text-stone-700 dark:text-stone-300 hover:bg-stone-200/40 dark:hover:bg-stone-800/40'
+          }`}
+        >
+          <div
+            className="flex items-center gap-1.5 min-w-0 flex-1"
+            onClick={() => handleSpaceClick(node.space.id)}
+          >
+            <button
+              type="button"
+              aria-label={`Toggle ${node.space.name} folder`}
+              onClick={(e) => toggleFolder(node.space.id, e)}
+              className="p-0.5 rounded text-stone-400 hover:text-stone-700 dark:hover:text-stone-200"
+            >
+              {isCollapsed ? (
+                <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5 shrink-0" />
+              )}
+            </button>
+            {isCollapsed ? (
+              <Folder className="w-3.5 h-3.5 text-amber-500/80 shrink-0" />
+            ) : (
+              <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            )}
+            <span className="truncate">
+              {node.space.name}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] text-stone-400 dark:text-stone-500 font-mono px-1">
+              {folderNotes.length}
+            </span>
+            {onCreateNote && (
+              <button
+                type="button"
+                title={`New note in ${node.space.name}`}
+                aria-label={`New note in ${node.space.name}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCreateNote(node.space.id);
+                }}
+                className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-stone-300/50 dark:hover:bg-stone-700 text-stone-500 hover:text-stone-900 transition"
+              >
+                <Plus className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Space notes when expanded */}
+        {!isCollapsed && (
+          <div className="space-y-0.5">
+            {folderNotes.map(n => renderNoteItem(n, depth))}
+            {node.children.map(child => renderSpaceNode(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <>
-      {/* Backdrop overlay */}
+      {/* Backdrop overlay for mobile drawer */}
       {isOpen && (
         <div
           data-testid="side-menu-backdrop"
@@ -54,11 +227,11 @@ export const SideMenu: React.FC<SideMenuProps> = ({
         />
       )}
 
-      {/* Sliding sidebar */}
+      {/* Persistent Master Sidebar */}
       <aside
         data-testid="side-menu"
         aria-label="Main Navigation"
-        className={`fixed top-0 bottom-0 left-0 w-64 bg-stone-50 dark:bg-stone-900 border-r border-stone-200/80 dark:border-stone-800 z-50 flex flex-col shadow-xl transition-transform duration-300 ease-in-out ${
+        className={`fixed top-0 bottom-0 left-0 w-64 bg-stone-50 dark:bg-stone-900 border-r border-stone-200/80 dark:border-stone-800 z-50 flex flex-col shadow-xl md:shadow-none transition-transform duration-300 ease-in-out ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -80,18 +253,22 @@ export const SideMenu: React.FC<SideMenuProps> = ({
           </button>
         </div>
 
-        {/* Navigation Items */}
-        <nav className="flex-1 px-3 py-4 space-y-4 overflow-y-auto">
+        {/* Navigation Items & Notion-style Tree */}
+        <nav className="flex-1 px-3 py-4 space-y-4 overflow-y-auto custom-scrollbar">
+          {/* Top Level Nav Items */}
           <div className="space-y-1">
             {NAV_ITEMS.map((item) => {
               const Icon = item.icon;
-              const isActive = currentPage === item.id;
+              const isActive = currentPage === item.id && !selectedNoteId;
               return (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => {
                     onNavigate(item.id);
+                    if (item.id === 'home' && onSelectSpace) {
+                      onSelectSpace(null);
+                    }
                     onClose();
                   }}
                   className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition ${
@@ -107,8 +284,42 @@ export const SideMenu: React.FC<SideMenuProps> = ({
             })}
           </div>
 
-          {/* Spaces Tree Selector */}
-          {onSelectSpace && (
+          {/* Hierarchical Notion-style Spaces Tree with Nested Notes */}
+          <div className="pt-3 border-t border-stone-200/60 dark:border-stone-800 space-y-2">
+            <div className="flex items-center justify-between px-2 text-[11px] font-semibold text-stone-400 dark:text-stone-500 uppercase tracking-wider">
+              <span>Spaces</span>
+              {onCreateNote && (
+                <button
+                  type="button"
+                  title="Create new note"
+                  aria-label="Create new note"
+                  onClick={() => onCreateNote(null)}
+                  className="p-1 rounded hover:bg-stone-200/60 dark:hover:bg-stone-800 text-stone-500 hover:text-stone-900 transition"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            <div className="space-y-0.5">
+              {tree.map(node => renderSpaceNode(node, 0))}
+            </div>
+
+            {/* Unassigned / General Notes */}
+            {unassignedNotes.length > 0 && (
+              <div className="pt-2">
+                <div className="px-2 py-1 text-[10px] font-semibold text-stone-400 uppercase tracking-wider">
+                  General Notes
+                </div>
+                <div className="space-y-0.5">
+                  {unassignedNotes.map(n => renderNoteItem(n, 0))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Manage Spaces Selector if provided */}
+          {onSelectSpace && onCreateSpace && (
             <div className="pt-3 border-t border-stone-200/60 dark:border-stone-800">
               <SpaceSelector
                 spaces={spaces}
@@ -116,7 +327,9 @@ export const SideMenu: React.FC<SideMenuProps> = ({
                 onSelectSpace={(spaceId) => {
                   onSelectSpace(spaceId);
                   onNavigate('home');
-                  onClose();
+                  if (typeof window !== 'undefined' && window.innerWidth < 768) {
+                    onClose();
+                  }
                 }}
                 onCreateSpace={onCreateSpace || (async () => {})}
                 onUpdateSpace={onUpdateSpace || (async () => {})}

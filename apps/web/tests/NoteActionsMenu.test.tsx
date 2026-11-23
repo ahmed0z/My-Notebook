@@ -94,4 +94,28 @@ describe('NoteActionsMenu', () => {
     fireEvent.click(screen.getByText('Work'));
     expect(onMoveToSpace).toHaveBeenCalledWith('s1');
   });
+
+  it('toggles full width when Full width switch is clicked', () => {
+    const onToggleFullWidth = vi.fn();
+    render(
+      <NoteActionsMenu
+        note={note}
+        spaces={spaces}
+        onArchiveToggle={() => {}}
+        onDelete={() => {}}
+        onMoveToSpace={() => {}}
+        isFullWidth={false}
+        onToggleFullWidth={onToggleFullWidth}
+      />
+    );
+
+    fireEvent.click(screen.getByTitle('Note options'));
+    expect(screen.getByText('Full width')).toBeInTheDocument();
+
+    const switchBtn = screen.getByRole('switch', { name: /toggle full width/i });
+    expect(switchBtn).toHaveAttribute('aria-checked', 'false');
+
+    fireEvent.click(switchBtn);
+    expect(onToggleFullWidth).toHaveBeenCalledWith(true);
+  });
 });

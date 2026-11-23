@@ -466,4 +466,78 @@ describe('BlockEditorModal', () => {
     expect(screen.queryByDisplayValue('Block 1 text')).not.toBeInTheDocument();
     expect(screen.queryByDisplayValue('Block 2 text')).not.toBeInTheDocument();
   });
+
+  it('renders in embedded mode with breadcrumb and edge scrollbar container', async () => {
+    const note: NoteDto = {
+      id: 'n1',
+      title: 'Embedded Canvas Note',
+      color: '#ffffff',
+      position: 0,
+      isPinned: false,
+      isArchived: false,
+      spaceId: 's1',
+      createdAt: '',
+      updatedAt: '',
+      blocks: []
+    };
+    const spaces = [{ id: 's1', name: 'Work', parentSpaceId: null, position: 0, createdAt: '' }];
+
+    render(
+      <BlockEditorModal
+        note={note}
+        spaces={spaces}
+        isEmbedded={true}
+        onClose={() => {}}
+        onNoteUpdated={() => {}}
+      />
+    );
+
+    expect(screen.getByText('Notes')).toBeInTheDocument();
+    expect(screen.getByText('Work')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Embedded Canvas Note')).toBeInTheDocument();
+
+    const scrollContainer = screen.getByTestId('modal-editor-content-area');
+    expect(scrollContainer).toHaveClass('w-full');
+    expect(scrollContainer).toHaveClass('overflow-y-auto');
+
+    const contentColumn = screen.getByTestId('note-content-column');
+    expect(contentColumn).toHaveClass('max-w-4xl');
+  });
+
+  it('toggles between readable column and full width via NoteActionsMenu', async () => {
+    localStorage.removeItem('notebook_note_full_width');
+    const note: NoteDto = {
+      id: 'n1',
+      title: 'Width Toggle Note',
+      color: '#ffffff',
+      position: 0,
+      isPinned: false,
+      isArchived: false,
+      createdAt: '',
+      updatedAt: '',
+      blocks: []
+    };
+
+    render(
+      <BlockEditorModal
+        note={note}
+        isEmbedded={true}
+        onClose={() => {}}
+        onNoteUpdated={() => {}}
+      />
+    );
+
+    const contentColumn = screen.getByTestId('note-content-column');
+    expect(contentColumn).toHaveClass('max-w-4xl');
+
+    // Open 3-dot options menu
+    const optionsBtn = screen.getByTitle('Note options');
+    fireEvent.click(optionsBtn);
+
+    // Click full width switch
+    const fullWidthSwitch = screen.getByRole('switch', { name: /toggle full width/i });
+    fireEvent.click(fullWidthSwitch);
+
+    expect(contentColumn).toHaveClass('max-w-full');
+  });
 });

@@ -45,6 +45,9 @@ interface BlockEditorModalProps {
   onDeleteNote?: (noteId: string) => void;
   spaces?: SpaceDto[];
   notes?: NoteDto[];
+  isEmbedded?: boolean;
+  onToggleMasterSidebar?: () => void;
+  isMasterSidebarOpen?: boolean;
 }
 
 export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
@@ -54,7 +57,10 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
   onOpenNote,
   onDeleteNote,
   spaces,
-  notes: propNotes
+  notes: propNotes,
+  isEmbedded = false,
+  onToggleMasterSidebar,
+  isMasterSidebarOpen = false
 }) => {
   const [note, setNote] = useState<NoteDto>(initialNote);
   const [blocks, setBlocks] = useState<BlockDto[]>([]);
@@ -72,11 +78,25 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
       return false;
     }
   });
+  const [isFullWidth, setIsFullWidth] = useState(() => {
+    try {
+      return localStorage.getItem('notebook_note_full_width') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [activeMenuBlockId, setActiveMenuBlockId] = useState<string | null>(null);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  const handleToggleFullWidth = (val: boolean) => {
+    setIsFullWidth(val);
+    try {
+      localStorage.setItem('notebook_note_full_width', String(val));
+    } catch {}
+  };
 
   const blockSaveTimers = useRef<Record<string, any>>({});
   const metaSaveTimer = useRef<any>(null);
@@ -674,25 +694,39 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
 
   const { isDark, getNoteCardColor } = useTheme();
   const modalBg = getNoteCardColor(note.color, isDark);
+  const noteSpace = spacesList.find(s => s.id === note.spaceId);
 
-  return (
+  const modalContent = (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm transition-all"
-      onClick={onClose}
+      data-testid="block-editor-modal-dialog"
+      onClick={(e) => e.stopPropagation()}
+      style={{ backgroundColor: modalBg }}
+      className={`relative w-full flex flex-col transition-all duration-200 overflow-hidden ${
+        isEmbedded
+          ? 'h-full flex-1 border-none rounded-none shadow-none'
+          : isFullscreen
+            ? 'h-full w-full rounded-none sm:rounded-none shadow-2xl border border-stone-200/80 dark:border-stone-800'
+            : `${isSidebarOpen ? 'max-w-5xl' : 'max-w-3xl'} h-full sm:h-[90vh] sm:rounded-3xl rounded-none shadow-2xl border border-stone-200/80 dark:border-stone-800`
+      }`}
     >
-      <div
-        data-testid="block-editor-modal-dialog"
-        onClick={(e) => e.stopPropagation()}
-        style={{ backgroundColor: modalBg }}
-        className={`relative w-full flex flex-col shadow-2xl transition-all duration-200 border border-stone-200/80 dark:border-stone-800 overflow-hidden ${
-          isFullscreen
-            ? 'h-full w-full rounded-none sm:rounded-none'
-            : `${isSidebarOpen ? 'max-w-5xl' : 'max-w-3xl'} h-full sm:h-[90vh] sm:rounded-3xl rounded-none`
-        }`}
-      >
-        {/* Modal Header */}
-        <div className="flex items-center justify-between p-4 sm:px-8 border-b border-stone-200/40 dark:border-stone-800/60 transition-colors">
-          <div className="flex items-center flex-1 min-w-0 mr-2">
+      {/* Modal / Page Header */}
+      <div className="flex items-center justify-between p-4 sm:px-8 border-b border-stone-200/40 dark:border-stone-800/60 transition-colors shrink-0">
+        <div className="flex items-center flex-1 min-w-0 mr-2">
+          {/* In embedded mode, button to expand master sidebar if collapsed */}
+          {isEmbedded && !isMasterSidebarOpen && onToggleMasterSidebar && (
+            <button
+              type="button"
+              onClick={onToggleMasterSidebar}
+              title="Open master sidebar"
+              aria-label="Open master sidebar"
+              className="p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 transition mr-2 shrink-0 text-stone-500 dark:text-stone-400"
+            >
+              <PanelLeft className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Standalone in-note sidebar toggle */}
+          {!isEmbedded && (
             <button
               type="button"
               onClick={toggleSidebar}
@@ -704,89 +738,114 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
             >
               <PanelLeft className="w-4 h-4" />
             </button>
-            <input
-              type="text"
-              value={note.title}
-              placeholder="Title"
-              aria-label="Note title"
-              onChange={(e) => handleTitleChange(e.target.value)}
-              className="text-xl sm:text-2xl font-bold bg-transparent border-none focus:outline-none w-full text-stone-900 dark:text-stone-100 placeholder-stone-400 dark:placeholder-stone-500"
-            />
-          </div>
+          )}
 
-          <div className="flex items-center gap-1 sm:gap-1.5 ml-2">
-            <button
-              type="button"
-              onClick={handlePinToggle}
-              title={note.isPinned ? 'Unpin' : 'Pin note'}
-              aria-label={note.isPinned ? 'Unpin' : 'Pin note'}
-              className={`p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 transition ${note.isPinned ? 'text-stone-900 dark:text-stone-100' : 'text-stone-400 dark:text-stone-500'}`}
-            >
-              <Pin className={`w-4 h-4 ${note.isPinned ? 'fill-stone-900 dark:fill-stone-100' : ''}`} />
-            </button>
-
-            {/* Color Palette */}
-            <div className="relative">
+          {/* Notion-style Breadcrumb in embedded mode */}
+          {isEmbedded && (
+            <div className="flex items-center gap-1.5 text-xs text-stone-500 dark:text-stone-400 mr-2 shrink-0">
               <button
                 type="button"
-                onClick={() => setShowColorPicker(!showColorPicker)}
-                title="Color palette"
-                aria-label="Change color"
-                className="p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-stone-500 dark:text-stone-400 transition"
+                onClick={onClose}
+                className="hover:text-stone-900 dark:hover:text-stone-100 font-medium transition"
               >
-                <Palette className="w-4 h-4" />
+                Notes
               </button>
-              {showColorPicker && (
+              <span>/</span>
+              {noteSpace && (
                 <>
-                  <div className="fixed inset-0 z-40" onClick={() => setShowColorPicker(false)} />
-                  <div className="absolute top-12 right-0 z-50">
-                    <ColorPicker
-                      currentColor={note.color}
-                      onSelectColor={(hex) => {
-                        handleColorChange(hex);
-                        setShowColorPicker(false);
-                      }}
-                    />
-                  </div>
+                  <span className="truncate max-w-[100px]">{noteSpace.name}</span>
+                  <span>/</span>
                 </>
               )}
             </div>
+          )}
 
-            {/* Three-Dot Actions Menu */}
-            <NoteActionsMenu
-              note={note}
-              spaces={spacesList}
-              onArchiveToggle={handleArchiveCurrentNote}
-              onDelete={handleDeleteCurrentNote}
-              onMoveToSpace={handleMoveToSpace}
-            />
-
-            {/* Fullscreen Toggle */}
-            <button
-              type="button"
-              onClick={() => setIsFullscreen(!isFullscreen)}
-              title={isFullscreen ? 'Exit full screen' : 'Full screen'}
-              aria-label={isFullscreen ? 'Exit full screen' : 'Full screen'}
-              className="p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 transition"
-            >
-              {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-            </button>
-
-            {/* Close */}
-            <button
-              type="button"
-              onClick={onClose}
-              title="Close"
-              aria-label="Close"
-              className="p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 transition"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+          <input
+            type="text"
+            value={note.title}
+            placeholder="Title"
+            aria-label="Note title"
+            onChange={(e) => handleTitleChange(e.target.value)}
+            className="text-xl sm:text-2xl font-bold bg-transparent border-none focus:outline-none w-full text-stone-900 dark:text-stone-100 placeholder-stone-400 dark:placeholder-stone-500"
+          />
         </div>
 
-        {/* Layout Body: In-Note Sidebar + Content Area */}
-        <div className="flex-1 flex overflow-hidden min-h-0">
+        <div className="flex items-center gap-1 sm:gap-1.5 ml-2">
+          <button
+            type="button"
+            onClick={handlePinToggle}
+            title={note.isPinned ? 'Unpin' : 'Pin note'}
+            aria-label={note.isPinned ? 'Unpin' : 'Pin note'}
+            className={`p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 transition ${note.isPinned ? 'text-stone-900 dark:text-stone-100' : 'text-stone-400 dark:text-stone-500'}`}
+          >
+            <Pin className={`w-4 h-4 ${note.isPinned ? 'fill-stone-900 dark:fill-stone-100' : ''}`} />
+          </button>
+
+          {/* Color Palette */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowColorPicker(!showColorPicker)}
+              title="Color palette"
+              aria-label="Change color"
+              className="p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-stone-500 dark:text-stone-400 transition"
+            >
+              <Palette className="w-4 h-4" />
+            </button>
+            {showColorPicker && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowColorPicker(false)} />
+                <div className="absolute top-12 right-0 z-50">
+                  <ColorPicker
+                    currentColor={note.color}
+                    onSelectColor={(hex) => {
+                      handleColorChange(hex);
+                      setShowColorPicker(false);
+                    }}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Three-Dot Actions Menu */}
+          <NoteActionsMenu
+            note={note}
+            spaces={spacesList}
+            onArchiveToggle={handleArchiveCurrentNote}
+            onDelete={handleDeleteCurrentNote}
+            onMoveToSpace={handleMoveToSpace}
+            isFullWidth={isFullWidth}
+            onToggleFullWidth={handleToggleFullWidth}
+          />
+
+          {/* Fullscreen Toggle */}
+          <button
+            type="button"
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            title={isFullscreen ? 'Exit full screen' : 'Full screen'}
+            aria-label={isFullscreen ? 'Exit full screen' : 'Full screen'}
+            className="p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 transition"
+          >
+            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+          </button>
+
+          {/* Close */}
+          <button
+            type="button"
+            onClick={onClose}
+            title="Close"
+            aria-label="Close"
+            className="p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 transition"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Layout Body: In-Note Sidebar + Content Area */}
+      <div className="flex-1 flex overflow-hidden min-h-0 w-full h-full">
+        {!isEmbedded && (
           <InNoteSidebar
             isOpen={isSidebarOpen}
             onToggle={toggleSidebar}
@@ -795,16 +854,24 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
             notes={propNotes && propNotes.length > 0 ? propNotes : allNotes}
             onSelectNote={handleOpenNote}
           />
+        )}
 
-          {/* Scrollable Block List */}
+        {/* Scrollable Block List: spans full available width so scrollbar is at the edge */}
+        <div
+          data-testid="modal-editor-content-area"
+          onPaste={handleCanvasPaste}
+          className={`flex-1 min-w-0 w-full h-full overflow-y-auto custom-scrollbar flex flex-col ${
+            isFullscreen ? 'max-w-7xl' : ''
+          }`}
+        >
           <div
-            data-testid="modal-editor-content-area"
-            onPaste={handleCanvasPaste}
-            className={`flex-1 min-w-0 overflow-y-auto custom-scrollbar p-4 sm:p-8 pb-32 flex flex-col ${
-              isFullscreen ? 'max-w-7xl mx-auto w-full px-4 sm:px-8' : 'w-full'
+            data-testid="note-content-column"
+            className={`flex-1 flex flex-col w-full p-4 sm:p-8 pb-32 transition-all duration-200 ${
+              isFullWidth
+                ? 'max-w-full px-4 sm:px-8 md:px-16'
+                : 'max-w-4xl mx-auto px-4 sm:px-8'
             }`}
           >
-            <div className="flex-1 flex flex-col w-full">
             {loading ? (
               <div className="py-12 text-center text-xs text-stone-400 dark:text-stone-500">Loading blocks...</div>
             ) : (
@@ -1102,6 +1169,18 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
           </div>
         </div>
       </div>
+  );
+
+  if (isEmbedded) {
+    return modalContent;
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm transition-all"
+      onClick={onClose}
+    >
+      {modalContent}
     </div>
   );
 };

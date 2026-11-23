@@ -105,4 +105,38 @@ describe('SideMenu', () => {
     const archiveBtn = screen.getByRole('button', { name: /archive/i });
     expect(archiveBtn).toHaveClass('font-semibold');
   });
+
+  it('renders spaces tree with nested notes and triggers onSelectNote', () => {
+    const handleSelectNote = vi.fn();
+    const spaces = [
+      { id: 's1', name: 'Engineering', parentSpaceId: null, position: 0, createdAt: '' }
+    ];
+    const notes = [
+      { id: 'n1', title: 'Architecture RFC', color: '#fff', position: 0, isPinned: false, isArchived: false, spaceId: 's1', createdAt: '', updatedAt: '' },
+      { id: 'n2', title: 'Quick Memo', color: '#fff', position: 0, isPinned: false, isArchived: false, spaceId: null, createdAt: '', updatedAt: '' }
+    ];
+
+    render(
+      <SideMenu
+        isOpen={true}
+        onClose={vi.fn()}
+        onNavigate={vi.fn()}
+        currentPage="home"
+        spaces={spaces}
+        notes={notes}
+        selectedNoteId="n1"
+        onSelectNote={handleSelectNote}
+      />
+    );
+
+    expect(screen.getByText('Engineering')).toBeInTheDocument();
+    expect(screen.getByText('Architecture RFC')).toBeInTheDocument();
+    expect(screen.getByText('Quick Memo')).toBeInTheDocument();
+
+    const activeNoteBtn = screen.getByText('Architecture RFC').closest('button');
+    expect(activeNoteBtn).toHaveClass('font-semibold');
+
+    fireEvent.click(screen.getByText('Quick Memo'));
+    expect(handleSelectNote).toHaveBeenCalledWith(expect.objectContaining({ id: 'n2' }));
+  });
 });
