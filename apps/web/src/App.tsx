@@ -193,6 +193,7 @@ export const AppContent: React.FC = () => {
       {selectedNote && (
         <BlockEditorModal
           note={selectedNote}
+          notes={notes}
           spaces={spaces}
           onClose={() => {
             setSelectedNote(null);

@@ -368,4 +368,48 @@ describe('BlockEditorModal', () => {
     fireEvent.click(within(menu).getByRole('button', { name: /delete block/i }));
     expect(ApiClient.deleteBlock).toHaveBeenCalledWith('b-single');
   });
+
+  it('renders wide full mode footprint without max-w-4xl constraint', async () => {
+    const note: NoteDto = {
+      id: 'n1',
+      title: 'Wide Mode Note',
+      color: '#ffffff',
+      position: 0,
+      isPinned: false,
+      isArchived: false,
+      createdAt: '',
+      updatedAt: '',
+      blocks: []
+    };
+
+    render(<BlockEditorModal note={note} onClose={() => {}} onNoteUpdated={() => {}} />);
+    const fullscreenBtn = screen.getByTitle('Full screen');
+    fireEvent.click(fullscreenBtn);
+
+    const contentContainer = screen.getByTestId('modal-editor-content-area');
+    expect(contentContainer).toHaveClass('max-w-7xl');
+    expect(contentContainer).not.toHaveClass('max-w-4xl');
+  });
+
+  it('renders in-note sidebar side-by-side with editor in compact mode without overlap', async () => {
+    const note: NoteDto = {
+      id: 'n1',
+      title: 'Compact Side-by-Side Note',
+      color: '#ffffff',
+      position: 0,
+      isPinned: false,
+      isArchived: false,
+      createdAt: '',
+      updatedAt: '',
+      blocks: []
+    };
+
+    render(<BlockEditorModal note={note} onClose={() => {}} onNoteUpdated={() => {}} />);
+    const sidebarToggle = screen.getByTitle('Toggle folder sidebar');
+    fireEvent.click(sidebarToggle);
+
+    const modalDialog = screen.getByTestId('block-editor-modal-dialog');
+    expect(modalDialog).toHaveClass('max-w-5xl');
+    expect(screen.getByTestId('in-note-sidebar')).toBeInTheDocument();
+  });
 });

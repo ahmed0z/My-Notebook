@@ -11,6 +11,8 @@ import { ColorPicker } from '../ColorPicker';
 import { SlashCommandOption } from './SlashCommandMenu';
 import { useTheme } from '../../context/ThemeContext';
 import { useSettings } from '../../context/SettingsContext';
+import { InNoteSidebar } from './InNoteSidebar';
+import { NoteActionsMenu } from './NoteActionsMenu';
 import {
   X,
   Palette,
@@ -30,7 +32,8 @@ import {
   Table,
   Image as ImageIcon,
   Copy,
-  FileText
+  FileText,
+  PanelLeft
 } from 'lucide-react';
 
 interface BlockEditorModalProps {
@@ -40,6 +43,7 @@ interface BlockEditorModalProps {
   onOpenNote?: (noteId: string) => void;
   onDeleteNote?: (noteId: string) => void;
   spaces?: SpaceDto[];
+  notes?: NoteDto[];
 }
 
 export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
@@ -48,17 +52,25 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
   onNoteUpdated,
   onOpenNote,
   onDeleteNote,
-  spaces
+  spaces,
+  notes: propNotes
 }) => {
   const [note, setNote] = useState<NoteDto>(initialNote);
   const [blocks, setBlocks] = useState<BlockDto[]>([]);
-  const [allNotes, setAllNotes] = useState<NoteDto[]>([]);
+  const [allNotes, setAllNotes] = useState<NoteDto[]>(propNotes || []);
   const [spacesList, setSpacesList] = useState<SpaceDto[]>(spaces || []);
   const [showSpacePicker, setShowSpacePicker] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const { defaultView } = useSettings();
   const [isFullscreen, setIsFullscreen] = useState(defaultView === 'fullscreen');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+    try {
+      return localStorage.getItem('notebook_in_note_sidebar_open') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [activeMenuBlockId, setActiveMenuBlockId] = useState<string | null>(null);
@@ -229,6 +241,27 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
     setNote(updated);
     onNoteUpdated(updated);
     saveNoteMeta({ isPinned: updatedPinned });
+  };
+
+  const toggleSidebar = () => {
+    setIsSidebarOpen(prev => {
+      const next = !prev;
+      try { localStorage.setItem('notebook_in_note_sidebar_open', String(next)); } catch {}
+      return next;
+    });
+  };
+
+  const handleArchiveCurrentNote = async () => {
+    const nextArchived = !note.isArchived;
+    const updated = { ...note, isArchived: nextArchived };
+    setNote(updated);
+    onNoteUpdated(updated);
+    try {
+      await ApiClient.updateNote(note.id, { isArchived: nextArchived });
+      onClose();
+    } catch (err) {
+      console.error('Failed to toggle archive', err);
+    }
   };
 
   const handleDeleteCurrentNote = async () => {
@@ -605,24 +638,38 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
       onClick={onClose}
     >
       <div
+        data-testid="block-editor-modal-dialog"
         onClick={(e) => e.stopPropagation()}
         style={{ backgroundColor: modalBg }}
-        className={`relative w-full flex flex-col shadow-2xl transition-all duration-200 border border-stone-200/80 dark:border-stone-800 ${
+        className={`relative w-full flex flex-col shadow-2xl transition-all duration-200 border border-stone-200/80 dark:border-stone-800 overflow-hidden ${
           isFullscreen
             ? 'h-full w-full rounded-none sm:rounded-none'
-            : 'max-w-3xl h-full sm:h-[90vh] sm:rounded-3xl rounded-none'
+            : `${isSidebarOpen ? 'max-w-5xl' : 'max-w-3xl'} h-full sm:h-[90vh] sm:rounded-3xl rounded-none`
         }`}
       >
         {/* Modal Header */}
         <div className="flex items-center justify-between p-4 sm:px-8 border-b border-stone-200/40 dark:border-stone-800/60 transition-colors">
-          <input
-            type="text"
-            value={note.title}
-            placeholder="Title"
-            aria-label="Note title"
-            onChange={(e) => handleTitleChange(e.target.value)}
-            className="text-xl sm:text-2xl font-bold bg-transparent border-none focus:outline-none w-full text-stone-900 dark:text-stone-100 placeholder-stone-400 dark:placeholder-stone-500"
-          />
+          <div className="flex items-center flex-1 min-w-0 mr-2">
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              title="Toggle folder sidebar"
+              aria-label="Toggle folder sidebar"
+              className={`p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 transition mr-2 shrink-0 ${
+                isSidebarOpen ? 'text-amber-600 dark:text-amber-400 bg-black/5 dark:bg-white/10' : 'text-stone-500 dark:text-stone-400'
+              }`}
+            >
+              <PanelLeft className="w-4 h-4" />
+            </button>
+            <input
+              type="text"
+              value={note.title}
+              placeholder="Title"
+              aria-label="Note title"
+              onChange={(e) => handleTitleChange(e.target.value)}
+              className="text-xl sm:text-2xl font-bold bg-transparent border-none focus:outline-none w-full text-stone-900 dark:text-stone-100 placeholder-stone-400 dark:placeholder-stone-500"
+            />
+          </div>
 
           <div className="flex items-center gap-1 sm:gap-1.5 ml-2">
             <button
@@ -662,69 +709,14 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
               )}
             </div>
 
-            {/* Space Picker */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setShowSpacePicker(!showSpacePicker)}
-                title="Move to space"
-                aria-label="Move to space"
-                className="p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-stone-500 dark:text-stone-400 transition flex items-center gap-1.5"
-              >
-                <Folder className="w-4 h-4" />
-                {note.spaceId && (
-                  <span className="text-xs font-medium max-w-[90px] truncate hidden sm:inline">
-                    {spacesList.find(s => s.id === note.spaceId)?.name || 'Space'}
-                  </span>
-                )}
-              </button>
-              {showSpacePicker && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setShowSpacePicker(false)} />
-                  <div
-                    onClick={(e) => e.stopPropagation()}
-                    className="absolute top-12 right-0 z-50 w-48 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-xl shadow-xl p-1.5 text-xs text-stone-800 dark:text-stone-200 max-h-60 overflow-y-auto"
-                  >
-                    <div className="px-2 py-1 font-semibold text-stone-400 dark:text-stone-500 uppercase text-[10px] tracking-wider">
-                      Move to space
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleMoveToSpace(null)}
-                      className={`w-full text-left px-2 py-1.5 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 flex items-center gap-1.5 ${
-                        !note.spaceId ? 'font-semibold text-amber-600 dark:text-amber-400' : ''
-                      }`}
-                    >
-                      <span>No space (General)</span>
-                    </button>
-                    {spacesList.map(s => (
-                      <button
-                        key={s.id}
-                        type="button"
-                        onClick={() => handleMoveToSpace(s.id)}
-                        className={`w-full text-left px-2 py-1.5 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 flex items-center gap-1.5 ${
-                          note.spaceId === s.id ? 'font-semibold text-amber-600 dark:text-amber-400' : ''
-                        }`}
-                      >
-                        <Folder className="w-3.5 h-3.5 text-stone-400 shrink-0" />
-                        <span className="truncate">{s.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Delete Note */}
-            <button
-              type="button"
-              onClick={handleDeleteCurrentNote}
-              title="Delete note"
-              aria-label="Delete note"
-              className="p-2 rounded-xl hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400 text-stone-400 dark:text-stone-500 transition"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            {/* Three-Dot Actions Menu */}
+            <NoteActionsMenu
+              note={note}
+              spaces={spacesList}
+              onArchiveToggle={handleArchiveCurrentNote}
+              onDelete={handleDeleteCurrentNote}
+              onMoveToSpace={handleMoveToSpace}
+            />
 
             {/* Fullscreen Toggle */}
             <button
@@ -750,9 +742,25 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
           </div>
         </div>
 
-        {/* Scrollable Block List */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-8 pb-32 flex flex-col">
-          <div className={`flex-1 flex flex-col ${isFullscreen ? 'max-w-4xl mx-auto w-full' : 'w-full'}`}>
+        {/* Layout Body: In-Note Sidebar + Content Area */}
+        <div className="flex-1 flex overflow-hidden min-h-0">
+          <InNoteSidebar
+            isOpen={isSidebarOpen}
+            onToggle={toggleSidebar}
+            currentNoteId={note.id}
+            spaces={spacesList}
+            notes={propNotes && propNotes.length > 0 ? propNotes : allNotes}
+            onSelectNote={handleOpenNote}
+          />
+
+          {/* Scrollable Block List */}
+          <div
+            data-testid="modal-editor-content-area"
+            className={`flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-8 pb-32 flex flex-col ${
+              isFullscreen ? 'max-w-7xl mx-auto w-full px-4 sm:px-8' : 'w-full'
+            }`}
+          >
+            <div className="flex-1 flex flex-col w-full">
             {loading ? (
               <div className="py-12 text-center text-xs text-stone-400 dark:text-stone-500">Loading blocks...</div>
             ) : (
@@ -1046,6 +1054,7 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
               noteId={note.id}
               onOpenNote={handleOpenNote}
             />
+            </div>
           </div>
         </div>
       </div>
