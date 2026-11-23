@@ -559,8 +559,8 @@ describe('BlockEditorModal', () => {
   });
 
   it('resets blocks and loads new note immediately when note prop changes', async () => {
-    const note1 = { id: 'note-1', title: 'First Note', color: 'default', spaceId: 'space-1', isPinned: false, isArchived: false, createdAt: '', updatedAt: '', blocks: [] };
-    const note2 = { id: 'note-2', title: 'Second Note', color: 'default', spaceId: 'space-1', isPinned: false, isArchived: false, createdAt: '', updatedAt: '', blocks: [] };
+    const note1 = { id: 'note-1', title: 'First Note', color: 'default', spaceId: 'space-1', position: 0, isPinned: false, isArchived: false, createdAt: '', updatedAt: '', blocks: [] };
+    const note2 = { id: 'note-2', title: 'Second Note', color: 'default', spaceId: 'space-1', position: 0, isPinned: false, isArchived: false, createdAt: '', updatedAt: '', blocks: [] };
 
     (ApiClient.getNote as any)
       .mockResolvedValueOnce(note1)
