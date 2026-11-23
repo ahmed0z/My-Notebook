@@ -52,6 +52,8 @@ interface EditableCellProps {
   value: string;
   placeholder?: string;
   onChange: (val: string) => void;
+  onEnterDown?: () => void;
+  isHeader?: boolean;
   className?: string;
 }
 
@@ -59,6 +61,8 @@ const EditableCell: React.FC<EditableCellProps> = ({
   value,
   placeholder,
   onChange,
+  onEnterDown,
+  isHeader,
   className,
 }) => {
   const ref = useRef<HTMLDivElement>(null);
@@ -85,15 +89,25 @@ const EditableCell: React.FC<EditableCellProps> = ({
         }
       }}
       onBlur={(e) => {
-        const text = e.currentTarget.textContent || '';
+        const text = e.currentTarget.innerText !== undefined ? e.currentTarget.innerText : (e.currentTarget.textContent || '');
         if (text !== value) {
           onChange(text);
         }
       }}
       onKeyDown={(e) => {
+        if (e.key === 'Enter' && e.shiftKey) {
+          if (isHeader) {
+            e.preventDefault();
+          }
+          return;
+        }
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
-          e.currentTarget.blur();
+          const text = e.currentTarget.innerText !== undefined ? e.currentTarget.innerText : (e.currentTarget.textContent || '');
+          if (text !== value) {
+            onChange(text);
+          }
+          onEnterDown?.();
         }
       }}
       className={className}
@@ -118,6 +132,29 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
   } | null>(null);
   const [isSelecting, setIsSelecting] = useState(false);
   const dragStartRef = useRef<CellCoord | null>(null);
+  const pendingFocusRef = useRef<{ row: number; col: number } | null>(null);
+
+  const focusCell = (r: number, c: number) => {
+    const selector = r === -1
+      ? `th[data-col-index="${c}"] [contenteditable]`
+      : `td[data-row-index="${r}"][data-col-index="${c}"] [contenteditable]`;
+    const cellEl = tableRef.current?.querySelector(selector) as HTMLElement | null;
+    if (cellEl) {
+      cellEl.focus();
+      try {
+        const selection = window.getSelection();
+        if (selection) {
+          const range = document.createRange();
+          range.selectNodeContents(cellEl);
+          range.collapse(false);
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+      } catch {
+        // Selection API may not be fully supported in headless test environments
+      }
+    }
+  };
 
   const columns = content?.columns?.length ? content.columns : ['Column 1', 'Column 2'];
   const rows = content?.rows?.length ? content.rows : [['', '']];
@@ -422,6 +459,63 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
     };
   }, [selectedRange, columns, rows, onChange, content]);
 
+  useEffect(() => {
+    if (pendingFocusRef.current) {
+      const { row, col } = pendingFocusRef.current;
+      pendingFocusRef.current = null;
+      focusCell(row, col);
+    }
+  }, [rows]);
+
+  const handleEnterOnHeader = (ci: number) => {
+    if (rows.length > 0) {
+      focusCell(0, ci);
+    } else {
+      const newRow = new Array(columns.length).fill('');
+      pendingFocusRef.current = { row: 0, col: ci };
+      onChange({ ...content, columns, rows: [newRow] });
+      if (typeof requestAnimationFrame !== 'undefined') {
+        requestAnimationFrame(() => focusCell(0, ci));
+      } else {
+        setTimeout(() => focusCell(0, ci), 0);
+      }
+    }
+  };
+
+  const handleEnterOnCell = (ri: number, ci: number) => {
+    if (ri < rows.length - 1) {
+      focusCell(ri + 1, ci);
+    } else {
+      const newRow = new Array(columns.length).fill('');
+      const newRowHeights = content.rowHeights ? [...content.rowHeights, 36] : undefined;
+
+      const currentCellEl = tableRef.current?.querySelector(
+        `td[data-row-index="${ri}"][data-col-index="${ci}"] [contenteditable]`
+      ) as HTMLElement | null;
+      const currentText = currentCellEl
+        ? (currentCellEl.innerText !== undefined ? currentCellEl.innerText : (currentCellEl.textContent || ''))
+        : rows[ri][ci];
+
+      const updatedRows = rows.map((r, rIdx) =>
+        rIdx === ri ? r.map((c, cIdx) => (cIdx === ci ? currentText : c)) : r
+      );
+      const newRows = [...updatedRows, newRow];
+
+      pendingFocusRef.current = { row: ri + 1, col: ci };
+      onChange({
+        ...content,
+        columns,
+        rows: newRows,
+        rowHeights: newRowHeights,
+      });
+      if (typeof requestAnimationFrame !== 'undefined') {
+        requestAnimationFrame(() => focusCell(ri + 1, ci));
+      } else {
+        setTimeout(() => focusCell(ri + 1, ci), 0);
+      }
+    }
+  };
+
   const updateColumnName = (colIndex: number, name: string) => {
     const newCols = [...columns];
     newCols[colIndex] = name;
@@ -605,7 +699,19 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
     const html = e.clipboardData.getData('text/html');
     if (!text && !html) return;
 
-    const targetEl = e.target as HTMLElement;
+    const activeEl = document.activeElement;
+    const targetEl = e.target as HTMLElement | null;
+    const isCellFocused = !!(
+      (activeEl && (activeEl.getAttribute('contenteditable') === 'true' || activeEl.closest('[contenteditable="true"]'))) ||
+      (targetEl && (targetEl.getAttribute('contenteditable') === 'true' || targetEl.closest('[contenteditable="true"]')))
+    );
+    const isHtmlTable = !!(html && (html.includes('<table') || html.includes('<tr')));
+
+    if (isCellFocused && !text.includes('\t') && !isHtmlTable) {
+      // Allow native multiline paste directly into the focused cell without whole-table replacement
+      return;
+    }
+
     const targetTd = targetEl?.closest ? targetEl.closest('td') : null;
     const targetTh = targetEl?.closest ? targetEl.closest('th') : null;
 
@@ -798,7 +904,9 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
                         <EditableCell
                           value={col}
                           placeholder="Column name"
+                          isHeader
                           onChange={(val) => updateColumnName(ci, val)}
+                          onEnterDown={() => handleEnterOnHeader(ci)}
                           className="w-full font-semibold outline-none text-stone-700 dark:text-stone-200 text-xs px-1.5 py-0.5 rounded hover:bg-stone-500/10 dark:hover:bg-white/10 focus:bg-white/80 dark:focus:bg-stone-800/80 focus:ring-1 focus:ring-stone-400 dark:focus:ring-stone-600 transition-colors select-text cursor-text empty:before:content-[attr(data-placeholder)] empty:before:text-stone-400 dark:empty:before:text-stone-500 empty:before:pointer-events-none empty:before:select-none truncate"
                         />
                       </div>
@@ -856,7 +964,7 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
               return (
                 <tr
                   key={ri}
-                  style={{ height: `${rowH}px` }}
+                  style={{ minHeight: `${rowH}px`, height: 'auto' }}
                   className="border-b border-stone-200/50 dark:border-stone-800/50 last:border-b-0 hover:bg-stone-500/5 dark:hover:bg-white/5 transition-colors group/tr relative"
                 >
                   {row.map((cell, ci) => {
@@ -866,7 +974,7 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
                         key={ci}
                         data-row-index={ri}
                         data-col-index={ci}
-                        style={{ width: `${activeColWidths[ci]}px`, height: `${rowH}px` }}
+                        style={{ width: `${activeColWidths[ci]}px`, minHeight: `${rowH}px`, height: 'auto' }}
                         onMouseDown={(e) => handleCellMouseDown(e, ri, ci)}
                         onMouseEnter={() => handleCellMouseEnter(ri, ci)}
                         className={`table-data-cell p-0 border-r border-stone-200/50 dark:border-stone-800/50 last:border-r-0 align-top transition-colors relative group/td ${
@@ -879,7 +987,8 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
                           value={cell}
                           placeholder="Empty"
                           onChange={(val) => updateCell(ri, ci, val)}
-                          className="w-full px-2.5 py-1.5 text-sm text-stone-800 dark:text-stone-100 outline-none focus:bg-white/80 dark:focus:bg-stone-800/80 focus:ring-1 focus:ring-stone-400 dark:focus:ring-stone-600 transition-colors select-text cursor-text empty:before:content-[attr(data-placeholder)] empty:before:text-stone-400 dark:empty:before:text-stone-600 empty:before:pointer-events-none empty:before:select-none"
+                          onEnterDown={() => handleEnterOnCell(ri, ci)}
+                          className="w-full px-2.5 py-1.5 text-sm text-stone-800 dark:text-stone-100 outline-none focus:bg-white/80 dark:focus:bg-stone-800/80 focus:ring-1 focus:ring-stone-400 dark:focus:ring-stone-600 transition-colors select-text cursor-text empty:before:content-[attr(data-placeholder)] empty:before:text-stone-400 dark:empty:before:text-stone-600 empty:before:pointer-events-none empty:before:select-none whitespace-pre-wrap break-words min-h-[1.75rem]"
                         />
 
                         {/* Row resize handle at bottom of cell */}
@@ -904,7 +1013,7 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
                     );
                   })}
                   <td
-                    style={{ height: `${rowH}px` }}
+                    style={{ minHeight: `${rowH}px`, height: 'auto' }}
                     className="w-10 p-1 text-center align-middle relative"
                   >
                     {rows.length > 1 && (

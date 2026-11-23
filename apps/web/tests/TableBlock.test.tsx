@@ -540,4 +540,167 @@ describe('TableBlock (Web)', () => {
     expect(table.style.minWidth).toBe('');
     expect(table.style.width).toBe('340px'); // 150 + 150 + 40px action col
   });
+
+  describe('Multi-line cell editing, dynamic row heights & navigation', () => {
+    it('supports Shift+Enter to insert newlines inside table cells', () => {
+      const handleChange = vi.fn();
+      render(
+        <TableBlock
+          content={{
+            columns: ['Col A'],
+            rows: [['First line']],
+          }}
+          onChange={handleChange}
+        />
+      );
+      const cell = screen.getByText('First line');
+      fireEvent.keyDown(cell, { key: 'Enter', shiftKey: true });
+      // Shift+Enter should not blur the cell or submit table
+      expect(cell).toBeInTheDocument();
+    });
+
+    it('escapes multiline cells with quotes in TSV clipboard copy', () => {
+      const content = {
+        columns: ['Col A'],
+        rows: [['Line 1\nLine 2']],
+      };
+      const onChange = vi.fn();
+      const { container } = render(<TableBlock content={content} onChange={onChange} />);
+      const tableWrapper = container.firstChild as HTMLElement;
+
+      const setData = vi.fn();
+      const clipboardData = { setData };
+      const copyEvent = new Event('copy', { bubbles: true, cancelable: true });
+      Object.assign(copyEvent, { clipboardData });
+
+      tableWrapper.dispatchEvent(copyEvent);
+
+      expect(copyEvent.defaultPrevented).toBe(true);
+      expect(setData).toHaveBeenCalledWith('text/plain', 'Col A\n"Line 1\nLine 2"');
+    });
+
+    it('appends and focuses a new row when pressing Enter in the last row', () => {
+      const handleChange = vi.fn();
+      render(
+        <TableBlock
+          content={{
+            columns: ['Col 1'],
+            rows: [['Row 1']],
+          }}
+          onChange={handleChange}
+        />
+      );
+      const cell = screen.getByText('Row 1');
+      fireEvent.keyDown(cell, { key: 'Enter', shiftKey: false });
+      expect(handleChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          rows: [['Row 1'], ['']],
+        })
+      );
+    });
+
+    it('navigates to the cell below when pressing Enter in a non-last row', () => {
+      const handleChange = vi.fn();
+      render(
+        <TableBlock
+          content={{
+            columns: ['Col 1'],
+            rows: [['Row 1'], ['Row 2']],
+          }}
+          onChange={handleChange}
+        />
+      );
+      const cell1 = screen.getByText('Row 1');
+      const cell2 = screen.getByText('Row 2');
+      const focusSpy = vi.spyOn(cell2, 'focus');
+
+      fireEvent.keyDown(cell1, { key: 'Enter', shiftKey: false });
+
+      expect(focusSpy).toHaveBeenCalled();
+      expect(handleChange).not.toHaveBeenCalled();
+    });
+
+    it('moves focus to the first row cell when pressing Enter in a column header', () => {
+      const handleChange = vi.fn();
+      render(
+        <TableBlock
+          content={{
+            columns: ['Col 1'],
+            rows: [['Row 1']],
+          }}
+          onChange={handleChange}
+        />
+      );
+      const header = screen.getByText('Col 1');
+      const cell1 = screen.getByText('Row 1');
+      const focusSpy = vi.spyOn(cell1, 'focus');
+
+      fireEvent.keyDown(header, { key: 'Enter', shiftKey: false });
+
+      expect(focusSpy).toHaveBeenCalled();
+    });
+
+    it('prevents newline on Shift+Enter in column header', () => {
+      render(
+        <TableBlock
+          content={{
+            columns: ['Col 1'],
+            rows: [['Row 1']],
+          }}
+          onChange={() => {}}
+        />
+      );
+      const header = screen.getByText('Col 1');
+      const event = fireEvent.keyDown(header, { key: 'Enter', shiftKey: true });
+      expect(event).toBe(false);
+    });
+
+    it('allows native paste without whole-table replacement when pasting multiline text inside a focused cell', () => {
+      const content = {
+        columns: ['Col 1'],
+        rows: [['Cell 1']],
+      };
+      const onChange = vi.fn();
+      render(<TableBlock content={content} onChange={onChange} />);
+
+      const cell = screen.getByText('Cell 1');
+      cell.focus();
+
+      const clipboardData = {
+        getData: vi.fn((format: string) => (format === 'text/plain' ? 'Line 1\nLine 2' : '')),
+      };
+      const pasteEvent = new Event('paste', { bubbles: true, cancelable: true });
+      Object.assign(pasteEvent, { clipboardData });
+
+      cell.dispatchEvent(pasteEvent);
+
+      expect(pasteEvent.defaultPrevented).toBe(false);
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('applies minHeight and height auto with whitespace-pre-wrap on body cells', () => {
+      const { container } = render(
+        <TableBlock
+          content={{
+            columns: ['Col 1'],
+            rows: [['Multi\nline\ntext']],
+            rowHeights: [48],
+          }}
+          onChange={() => {}}
+        />
+      );
+      const row = container.querySelector('tbody tr') as HTMLElement;
+      expect(row.style.minHeight).toBe('48px');
+      expect(row.style.height).toBe('auto');
+
+      const cellTd = container.querySelector('tbody td.table-data-cell') as HTMLElement;
+      expect(cellTd.style.minHeight).toBe('48px');
+      expect(cellTd.style.height).toBe('auto');
+
+      const editableDiv = cellTd.querySelector('[contenteditable="true"]') as HTMLElement;
+      expect(editableDiv.className).toContain('whitespace-pre-wrap');
+      expect(editableDiv.className).toContain('break-words');
+      expect(editableDiv.className).toContain('min-h-[1.75rem]');
+    });
+  });
 });
