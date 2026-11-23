@@ -675,4 +675,73 @@ describe('BlockEditorModal', () => {
       expect(screen.getByDisplayValue('Second Note')).toBeInTheDocument();
     });
   });
+
+  it('renders fullscreen dialog with absolute inset-0 z-30 overlaying canvas', async () => {
+    const note: NoteDto = {
+      id: 'n1',
+      title: 'Fullscreen Note',
+      color: '#ffffff',
+      position: 0,
+      isPinned: false,
+      isArchived: false,
+      createdAt: '',
+      updatedAt: '',
+      blocks: []
+    };
+
+    render(<BlockEditorModal note={note} onClose={() => {}} onNoteUpdated={() => {}} />);
+    const fullscreenBtn = screen.getByTitle('Full screen');
+    fireEvent.click(fullscreenBtn);
+
+    const dialog = screen.getByTestId('block-editor-modal-dialog');
+    expect(dialog).toHaveClass('absolute');
+    expect(dialog).toHaveClass('inset-0');
+    expect(dialog).toHaveClass('z-30');
+    expect(dialog).toHaveClass('w-full');
+    expect(dialog).toHaveClass('h-full');
+  });
+
+  it('clears pending debounced saves and does not overwrite state when switching notes', async () => {
+    const note1: NoteDto = { id: 'note-1', title: 'Note 1', color: 'default', spaceId: 'space-1', position: 0, isPinned: false, isArchived: false, createdAt: '', updatedAt: '', blocks: [{ id: 'b1', type: 'text', content: { text: 'Initial', level: 'paragraph' }, position: 0, noteId: 'note-1', createdAt: '', updatedAt: '' }] };
+    const note2: NoteDto = { id: 'note-2', title: 'Note 2', color: 'default', spaceId: 'space-1', position: 0, isPinned: false, isArchived: false, createdAt: '', updatedAt: '', blocks: [{ id: 'b2', type: 'text', content: { text: 'Second', level: 'paragraph' }, position: 0, noteId: 'note-2', createdAt: '', updatedAt: '' }] };
+
+    let resolveNote1Update: any;
+    const note1UpdatePromise = new Promise(resolve => {
+      resolveNote1Update = resolve;
+    });
+
+    (ApiClient.getNote as any)
+      .mockResolvedValueOnce(note1)
+      .mockResolvedValueOnce(note2);
+
+    (ApiClient.updateNote as any).mockImplementation(() => note1UpdatePromise);
+
+    const { rerender } = render(
+      <BlockEditorModal note={note1} onClose={() => {}} onNoteUpdated={() => {}} />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Note 1')).toBeInTheDocument();
+    });
+
+    // Trigger title edit on note 1
+    const titleInput = screen.getByDisplayValue('Note 1');
+    fireEvent.change(titleInput, { target: { value: 'Edited Note 1' } });
+
+    // Switch note prop to note 2 before timer fires
+    rerender(
+      <BlockEditorModal note={note2} onClose={() => {}} onNoteUpdated={() => {}} />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Note 2')).toBeInTheDocument();
+    });
+
+    // Now resolve note 1's update
+    resolveNote1Update({ id: 'note-1', title: 'Edited Note 1', updatedAt: new Date().toISOString() });
+
+    // Ensure Note 2's title remains intact and is not overwritten by Note 1
+    expect(screen.queryByDisplayValue('Edited Note 1')).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue('Note 2')).toBeInTheDocument();
+  });
 });

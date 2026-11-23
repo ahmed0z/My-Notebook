@@ -5,49 +5,121 @@ export interface ParsedTableData {
   rawGrid: string[][];
 }
 
-function cleanCell(cell: string): string {
-  let trimmed = cell.trim();
-  if (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2) {
-    trimmed = trimmed.substring(1, trimmed.length - 1).replace(/""/g, '"');
+/**
+ * Parses TSV string following RFC 4180 principles:
+ * - Cells enclosed in double quotes can contain newlines (\n, \r\n) and delimiters (\t).
+ * - Inside double quotes, a pair of double quotes ("") represents a single escaped quote.
+ */
+export function parseRfcTsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let currentRow: string[] = [];
+  let currentCell = '';
+  let inQuotes = false;
+  let cellWasQuoted = false;
+  let i = 0;
+
+  while (i < text.length) {
+    const ch = text[i];
+
+    if (inQuotes) {
+      if (ch === '"') {
+        if (i + 1 < text.length && text[i + 1] === '"') {
+          // Escaped quote
+          currentCell += '"';
+          i += 2;
+        } else {
+          // Closing quote
+          inQuotes = false;
+          i++;
+        }
+      } else {
+        currentCell += ch;
+        i++;
+      }
+    } else {
+      if (ch === '"' && currentCell.trim() === '') {
+        // Double-quoted cell starts
+        inQuotes = true;
+        cellWasQuoted = true;
+        currentCell = '';
+        i++;
+      } else if (ch === '\t') {
+        currentRow.push(cellWasQuoted ? currentCell : currentCell.trim());
+        currentCell = '';
+        cellWasQuoted = false;
+        i++;
+      } else if (ch === '\r') {
+        if (i + 1 < text.length && text[i + 1] === '\n') {
+          i++;
+        }
+        currentRow.push(cellWasQuoted ? currentCell : currentCell.trim());
+        rows.push(currentRow);
+        currentRow = [];
+        currentCell = '';
+        cellWasQuoted = false;
+        i++;
+      } else if (ch === '\n') {
+        currentRow.push(cellWasQuoted ? currentCell : currentCell.trim());
+        rows.push(currentRow);
+        currentRow = [];
+        currentCell = '';
+        cellWasQuoted = false;
+        i++;
+      } else {
+        if (!(cellWasQuoted && (ch === ' ' || ch === '\t'))) {
+          currentCell += ch;
+        }
+        i++;
+      }
+    }
   }
-  return trimmed;
+
+  // Push final cell and row if anything accumulated
+  if (currentCell.length > 0 || cellWasQuoted || currentRow.length > 0) {
+    currentRow.push(cellWasQuoted ? currentCell : currentCell.trim());
+    rows.push(currentRow);
+  }
+
+  // Remove trailing blank rows if any
+  while (rows.length > 0) {
+    const lastRow = rows[rows.length - 1];
+    if (lastRow.every(c => c.trim() === '')) {
+      rows.pop();
+    } else {
+      break;
+    }
+  }
+
+  return rows;
 }
 
 export function parseClipboardTableData(textPlain: string, textHtml?: string): ParsedTableData | null {
   // 1. Try parsing textPlain as TSV
   if (textPlain && textPlain.trim().length > 0) {
-    const rawLines = textPlain.split(/\r?\n/);
-    // Remove trailing blank line if any
-    while (rawLines.length > 0 && rawLines[rawLines.length - 1].trim() === '') {
-      rawLines.pop();
-    }
+    const parsedRows = parseRfcTsv(textPlain);
 
     // Must have at least 2 rows and at least one tab to be considered a table from clipboard
-    if (rawLines.length >= 2) {
-      const hasTab = rawLines.some(line => line.includes('\t'));
-      if (hasTab) {
-        const splitRows = rawLines.map(line => line.split('\t').map(cleanCell));
-        let maxCols = 0;
-        for (const row of splitRows) {
-          if (row.length > maxCols) maxCols = row.length;
-        }
+    if (parsedRows.length >= 2 && textPlain.includes('\t')) {
+      let maxCols = 0;
+      for (const row of parsedRows) {
+        if (row.length > maxCols) maxCols = row.length;
+      }
 
-        if (maxCols >= 2) {
-          const paddedRows = splitRows.map(row => {
-            const padded = [...row];
-            while (padded.length < maxCols) {
-              padded.push('');
-            }
-            return padded;
-          });
+      if (maxCols >= 2) {
+        const paddedRows = parsedRows.map(row => {
+          const padded = [...row];
+          while (padded.length < maxCols) {
+            padded.push('');
+          }
+          return padded;
+        });
 
-          return {
-            isTable: true,
-            columns: paddedRows[0].map((col, idx) => col || `Column ${idx + 1}`),
-            rows: paddedRows.slice(1),
-            rawGrid: paddedRows
-          };
-        }
+        return {
+          isTable: true,
+          columns: paddedRows[0].map((col, idx) => col || `Column ${idx + 1}`),
+          rows: paddedRows.slice(1),
+          rawGrid: paddedRows
+        };
       }
     }
   }

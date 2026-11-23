@@ -44,4 +44,29 @@ describe('parseClipboardTableData', () => {
     expect(result?.columns).toEqual(['Name', 'Age']);
     expect(result?.rows).toEqual([['Alice', '30']]);
   });
+
+  it('parses RFC 4180 double-quoted multiline cells preserving cell content across rows', () => {
+    const tsv = 'Header 1\tHeader 2\r\n"Line 1\nLine 2"\tValue B\r\n"Line 3\r\nLine 4"\t"Value with ""escaped"" quotes"';
+    const result = parseClipboardTableData(tsv);
+    expect(result).not.toBeNull();
+    expect(result?.isTable).toBe(true);
+    expect(result?.columns).toEqual(['Header 1', 'Header 2']);
+    expect(result?.rows).toEqual([
+      ['Line 1\nLine 2', 'Value B'],
+      ['Line 3\r\nLine 4', 'Value with "escaped" quotes']
+    ]);
+    expect(result?.rawGrid).toEqual([
+      ['Header 1', 'Header 2'],
+      ['Line 1\nLine 2', 'Value B'],
+      ['Line 3\r\nLine 4', 'Value with "escaped" quotes']
+    ]);
+  });
+
+  it('handles quoted cells with inner tabs without breaking column count', () => {
+    const tsv = 'ColA\tColB\n"Text with\ttab"\tNormal Cell\nVal1\tVal2';
+    const result = parseClipboardTableData(tsv);
+    expect(result).not.toBeNull();
+    expect(result?.columns).toEqual(['ColA', 'ColB']);
+    expect(result?.rows[0]).toEqual(['Text with\ttab', 'Normal Cell']);
+  });
 });

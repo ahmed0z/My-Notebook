@@ -123,7 +123,11 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
   useEffect(() => {
     return () => {
       Object.values(blockSaveTimers.current).forEach(t => clearTimeout(t));
-      if (metaSaveTimer.current) clearTimeout(metaSaveTimer.current);
+      blockSaveTimers.current = {};
+      if (metaSaveTimer.current) {
+        clearTimeout(metaSaveTimer.current);
+        metaSaveTimer.current = null;
+      }
     };
   }, []);
 
@@ -149,15 +153,27 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
   // Load full note with blocks
   useEffect(() => {
     let isMounted = true;
+    const targetNoteId = initialNote.id;
+    const isSameNote = currentNoteIdRef.current === targetNoteId;
+
+    if (!isSameNote) {
+      // Clear pending debounced saves when switching to a different note
+      Object.values(blockSaveTimers.current).forEach(t => clearTimeout(t));
+      blockSaveTimers.current = {};
+      if (metaSaveTimer.current) {
+        clearTimeout(metaSaveTimer.current);
+        metaSaveTimer.current = null;
+      }
+      currentNoteIdRef.current = targetNoteId;
+    }
+
     const fetchNote = async () => {
       try {
         setLoading(true);
-        const data = await ApiClient.getNote(initialNote.id);
-        if (isMounted) {
+        const data = await ApiClient.getNote(targetNoteId);
+        if (isMounted && currentNoteIdRef.current === targetNoteId) {
           setNote(data);
           const loadedBlocks = data.blocks || [];
-          const isSameNote = currentNoteIdRef.current === initialNote.id;
-          currentNoteIdRef.current = initialNote.id;
           setBlocks(prev => {
             if (isSameNote && prev.length > (initialNote.blocks?.length || 0)) {
               return prev;
@@ -168,18 +184,26 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
           // If note is brand new or has 0 blocks, add a ready text block so user can type immediately
           if (loadedBlocks.length === 0) {
             setTimeout(() => {
-              if (isMounted) handleAddBlock('text');
+              if (isMounted && currentNoteIdRef.current === targetNoteId) handleAddBlock('text');
             }, 50);
           }
         }
       } catch (err) {
         console.error('Failed to load note blocks', err);
       } finally {
-        if (isMounted) setLoading(false);
+        if (isMounted && currentNoteIdRef.current === targetNoteId) setLoading(false);
       }
     };
     fetchNote();
-    return () => { isMounted = false; };
+    return () => {
+      isMounted = false;
+      Object.values(blockSaveTimers.current).forEach(t => clearTimeout(t));
+      blockSaveTimers.current = {};
+      if (metaSaveTimer.current) {
+        clearTimeout(metaSaveTimer.current);
+        metaSaveTimer.current = null;
+      }
+    };
   }, [initialNote.id]);
 
   // Load all notes for autocomplete & link resolving
@@ -230,7 +254,11 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
 
     // Flush any pending debounces before navigating
     Object.values(blockSaveTimers.current).forEach(t => clearTimeout(t));
-    if (metaSaveTimer.current) clearTimeout(metaSaveTimer.current);
+    blockSaveTimers.current = {};
+    if (metaSaveTimer.current) {
+      clearTimeout(metaSaveTimer.current);
+      metaSaveTimer.current = null;
+    }
 
     currentNoteIdRef.current = targetId;
 
@@ -253,19 +281,25 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
 
   // Debounce helper for title and color
   const saveNoteMeta = async (updates: Partial<NoteDto>) => {
+    const targetNoteId = currentNoteIdRef.current;
     setIsSaving(true);
     const updatedNote = { ...note, ...updates };
     // Optimistically update parent state immediately
     onNoteUpdated(updatedNote);
     try {
-      const serverUpdated = await ApiClient.updateNote(note.id, updates);
+      const serverUpdated = await ApiClient.updateNote(targetNoteId, updates);
+      if (currentNoteIdRef.current !== targetNoteId) {
+        return;
+      }
       setNote(prev => ({ ...prev, ...serverUpdated }));
       onNoteUpdated({ ...updatedNote, ...serverUpdated });
       setLastSaved(new Date());
     } catch (err) {
       console.error('Failed to update note meta', err);
     } finally {
-      setIsSaving(false);
+      if (currentNoteIdRef.current === targetNoteId) {
+        setIsSaving(false);
+      }
     }
   };
 
@@ -375,7 +409,25 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
     }
   };
 
+  const saveBlock = async (targetNoteId: string, blockId: string, contentJson: string) => {
+    if (currentNoteIdRef.current !== targetNoteId) return;
+    setIsSaving(true);
+    try {
+      await ApiClient.patchBlock(blockId, { contentJson });
+      if (currentNoteIdRef.current === targetNoteId) {
+        setLastSaved(new Date());
+      }
+    } catch (err) {
+      console.error('Failed to auto-save block', err);
+    } finally {
+      if (currentNoteIdRef.current === targetNoteId) {
+        setIsSaving(false);
+      }
+    }
+  };
+
   const handleBlockChange = (blockId: string, updatedContent: any) => {
+    const targetNoteId = currentNoteIdRef.current;
     const contentJson = JSON.stringify(updatedContent);
     setBlocks(prev => {
       const updatedBlocks = prev.map(b =>
@@ -390,16 +442,8 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
       clearTimeout(blockSaveTimers.current[blockId]);
     }
 
-    blockSaveTimers.current[blockId] = setTimeout(async () => {
-      setIsSaving(true);
-      try {
-        await ApiClient.patchBlock(blockId, { contentJson });
-        setLastSaved(new Date());
-      } catch (err) {
-        console.error('Failed to auto-save block', err);
-      } finally {
-        setIsSaving(false);
-      }
+    blockSaveTimers.current[blockId] = setTimeout(() => {
+      saveBlock(targetNoteId, blockId, contentJson);
     }, 800);
   };
 
@@ -1154,7 +1198,7 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
         data-testid="block-editor-modal-dialog"
         onClick={(e) => e.stopPropagation()}
         style={{ backgroundColor: modalBg }}
-        className="relative w-full h-full rounded-none border-0 shadow-none flex flex-col overflow-hidden transition-all duration-200"
+        className="absolute inset-0 z-30 w-full h-full rounded-none border-0 shadow-none flex flex-col overflow-hidden transition-all duration-200"
       >
         {dialogContent}
       </div>

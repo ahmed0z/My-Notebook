@@ -661,8 +661,9 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
         const selectedHeaders = thElements.filter(th => range.intersectsNode(th));
         if (selectedHeaders.length > 0) {
           const headerVals = selectedHeaders.map(th => {
-            const editable = th.querySelector('[contenteditable]');
-            const raw = editable ? (editable.textContent || '') : (th.textContent || '');
+            const editable = th.querySelector<HTMLElement>('[contenteditable]');
+            const thEl = th as HTMLElement;
+            const raw = editable ? (editable.innerText !== undefined ? editable.innerText : (editable.textContent || '')) : (thEl.innerText !== undefined ? thEl.innerText : (thEl.textContent || ''));
             return escapeTsvCell(raw);
           });
           tsvRows.push(headerVals.join('\t'));
@@ -673,8 +674,9 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
           const selectedRowTd = rowTd.filter(td => range.intersectsNode(td));
           if (selectedRowTd.length > 0) {
             const vals = selectedRowTd.map(td => {
-              const editable = td.querySelector('[contenteditable]');
-              const raw = editable ? (editable.textContent || '') : (td.textContent || '');
+              const editable = td.querySelector<HTMLElement>('[contenteditable]');
+              const tdEl = td as HTMLElement;
+              const raw = editable ? (editable.innerText !== undefined ? editable.innerText : (editable.textContent || '')) : (tdEl.innerText !== undefined ? tdEl.innerText : (tdEl.textContent || ''));
               return escapeTsvCell(raw);
             });
             tsvRows.push(vals.join('\t'));
