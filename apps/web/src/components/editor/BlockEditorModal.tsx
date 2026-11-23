@@ -80,6 +80,7 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
 
   const blockSaveTimers = useRef<Record<string, any>>({});
   const metaSaveTimer = useRef<any>(null);
+  const currentNoteIdRef = useRef<string>(initialNote.id);
 
   // Clean up debounce timers on unmount
   useEffect(() => {
@@ -113,8 +114,10 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
         if (isMounted) {
           setNote(data);
           const loadedBlocks = data.blocks || [];
+          const isSameNote = currentNoteIdRef.current === initialNote.id;
+          currentNoteIdRef.current = initialNote.id;
           setBlocks(prev => {
-            if (prev.length > (initialNote.blocks?.length || 0)) {
+            if (isSameNote && prev.length > (initialNote.blocks?.length || 0)) {
               return prev;
             }
             return loadedBlocks;
@@ -182,6 +185,12 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
     if (found) {
       targetId = found.id;
     }
+
+    // Flush any pending debounces before navigating
+    Object.values(blockSaveTimers.current).forEach(t => clearTimeout(t));
+    if (metaSaveTimer.current) clearTimeout(metaSaveTimer.current);
+
+    currentNoteIdRef.current = targetId;
 
     if (onOpenNote) {
       onOpenNote(targetId);
@@ -266,7 +275,6 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
   };
 
   const handleDeleteCurrentNote = async () => {
-    if (!window.confirm(`Delete "${note.title || 'Untitled Note'}"?`)) return;
     if (onDeleteNote) {
       onDeleteNote(note.id);
     } else {
@@ -632,7 +640,15 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
 
   const handleCanvasPaste = (e: React.ClipboardEvent) => {
     const target = e.target as HTMLElement;
-    if (target?.closest && target.closest('table, input, textarea, [data-testid="in-note-sidebar"]')) {
+    if (target?.closest && target.closest('table, [data-testid="in-note-sidebar"]')) {
+      return;
+    }
+
+    const textarea = target?.closest ? (target.closest('textarea') as HTMLTextAreaElement | null) : null;
+    if (textarea && textarea.value.trim().length > 0) {
+      return;
+    }
+    if (target?.closest && target.closest('input')) {
       return;
     }
 
@@ -642,6 +658,13 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
 
     if (tableData && tableData.isTable) {
       e.preventDefault();
+      if (textarea) {
+        const blockWrapper = textarea.closest('[data-block-id]');
+        const emptyBlockId = blockWrapper?.getAttribute('data-block-id');
+        if (emptyBlockId) {
+          handleDeleteBlock(emptyBlockId);
+        }
+      }
       handleAddBlock('table', {
         columns: tableData.columns,
         rows: tableData.rows
@@ -777,7 +800,7 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
           <div
             data-testid="modal-editor-content-area"
             onPaste={handleCanvasPaste}
-            className={`flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-8 pb-32 flex flex-col ${
+            className={`flex-1 min-w-0 overflow-y-auto custom-scrollbar p-4 sm:p-8 pb-32 flex flex-col ${
               isFullscreen ? 'max-w-7xl mx-auto w-full px-4 sm:px-8' : 'w-full'
             }`}
           >

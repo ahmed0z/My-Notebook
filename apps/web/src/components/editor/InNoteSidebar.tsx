@@ -165,12 +165,20 @@ export const InNoteSidebar: React.FC<InNoteSidebarProps> = ({
   };
 
   return (
-    <aside
-      data-testid="in-note-sidebar"
-      aria-label="Note folders and pages"
-      role="navigation"
-      className="w-60 md:w-64 h-full bg-stone-50/80 dark:bg-stone-900/80 border-r border-stone-200/70 dark:border-stone-800/80 flex flex-col shrink-0 select-none overflow-hidden"
-    >
+    <>
+      {/* Mobile backdrop */}
+      <div
+        data-testid="in-note-sidebar-backdrop"
+        className="fixed inset-0 bg-black/40 backdrop-blur-xs z-30 sm:hidden animate-in fade-in duration-200"
+        onClick={onToggle}
+        aria-hidden="true"
+      />
+      <aside
+        data-testid="in-note-sidebar"
+        aria-label="Note folders and pages"
+        role="navigation"
+        className="fixed sm:static top-0 bottom-0 left-0 z-40 sm:z-auto w-60 md:w-64 h-full bg-stone-50 dark:bg-stone-900 border-r border-stone-200/70 dark:border-stone-800/80 flex flex-col shrink-0 select-none overflow-hidden shadow-2xl sm:shadow-none transition-transform animate-in slide-in-from-left duration-200"
+      >
       {/* Header */}
       <div className="flex items-center justify-between px-3.5 py-3 border-b border-stone-200/50 dark:border-stone-800/50">
         <div className="flex items-center gap-1.5">
@@ -227,5 +235,6 @@ export const InNoteSidebar: React.FC<InNoteSidebarProps> = ({
         )}
       </div>
     </aside>
+    </>
   );
 };

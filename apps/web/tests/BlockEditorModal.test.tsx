@@ -412,4 +412,58 @@ describe('BlockEditorModal', () => {
     expect(modalDialog).toHaveClass('max-w-5xl');
     expect(screen.getByTestId('in-note-sidebar')).toBeInTheDocument();
   });
+
+  it('correctly resets blocks when switching to another note with fewer blocks', async () => {
+    (ApiClient.getNote as any)
+      .mockResolvedValueOnce({
+        id: 'n1',
+        title: 'Note 1',
+        color: '#fff',
+        isPinned: false,
+        isArchived: false,
+        position: 0,
+        createdAt: '',
+        updatedAt: '',
+        blocks: [
+          { id: 'b1', type: 'text', content: { text: 'Block 1 text' } },
+          { id: 'b2', type: 'text', content: { text: 'Block 2 text' } }
+        ]
+      })
+      .mockResolvedValueOnce({
+        id: 'n2',
+        title: 'Note 2',
+        color: '#fff',
+        isPinned: false,
+        isArchived: false,
+        position: 0,
+        createdAt: '',
+        updatedAt: '',
+        blocks: [
+          { id: 'b3', type: 'text', content: { text: 'Single block in Note 2' } }
+        ]
+      });
+
+    const { rerender } = render(
+      <BlockEditorModal
+        note={{ id: 'n1', title: 'Note 1', color: '#fff', isPinned: false, isArchived: false, position: 0, createdAt: '', updatedAt: '', blocks: [] }}
+        onClose={() => {}}
+        onNoteUpdated={() => {}}
+      />
+    );
+
+    expect(await screen.findByDisplayValue('Block 1 text')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Block 2 text')).toBeInTheDocument();
+
+    rerender(
+      <BlockEditorModal
+        note={{ id: 'n2', title: 'Note 2', color: '#fff', isPinned: false, isArchived: false, position: 0, createdAt: '', updatedAt: '', blocks: [] }}
+        onClose={() => {}}
+        onNoteUpdated={() => {}}
+      />
+    );
+
+    expect(await screen.findByDisplayValue('Single block in Note 2')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('Block 1 text')).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue('Block 2 text')).not.toBeInTheDocument();
+  });
 });

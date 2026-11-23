@@ -41,6 +41,7 @@ export const NoteActionsMenu: React.FC<NoteActionsMenuProps> = ({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        e.stopPropagation();
         if (showFolderSubmenu) {
           setShowFolderSubmenu(false);
         } else {
