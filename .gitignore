@@ -7,3 +7,4 @@ publish/
 publish-*/
 *.zip
 *.log
+repomix-output.xml
