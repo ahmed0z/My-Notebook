@@ -199,67 +199,67 @@ export const AppContent: React.FC = () => {
 
       {/* Main Workspace Canvas */}
       <div className={`flex-1 h-full min-w-0 flex flex-col overflow-hidden transition-all duration-300 ease-in-out ${sideMenuOpen ? 'md:pl-64' : 'pl-0'}`}>
-        <div className="flex-1 w-full h-full overflow-y-auto custom-scrollbar">
-          {activePage === 'home' && (
-            <HomePage
-              notes={notes}
-              loading={notesLoading}
-              onRefresh={loadNotes}
-              onSelectNote={(note) => setSelectedNote(note)}
-              onNoteCreated={handleNoteCreated}
-              onNoteUpdated={handleNoteUpdated}
-              onNoteDeleted={handleDeleteNote}
-              onToggleSideMenu={toggleSideMenu}
-              activeSpaceId={activeSpaceId}
-              spaces={spaces}
-              onSelectSpace={setActiveSpaceId}
-              onMoveNote={handleMoveNote}
-            />
-          )}
+        {selectedNote ? (
+          <BlockEditorModal
+            note={selectedNote}
+            notes={notes}
+            spaces={spaces}
+            isEmbedded={true}
+            isMasterSidebarOpen={sideMenuOpen}
+            onToggleMasterSidebar={toggleSideMenu}
+            onClose={() => setSelectedNote(null)}
+            onNoteUpdated={handleNoteUpdated}
+            onDeleteNote={handleDeleteNote}
+            onOpenNote={async (targetId) => {
+              try {
+                const fullNote = await ApiClient.getNote(targetId);
+                setSelectedNote(fullNote);
+              } catch (err) {
+                console.error('Failed to open linked note', err);
+              }
+            }}
+          />
+        ) : (
+          <div className="flex-1 w-full h-full overflow-y-auto custom-scrollbar">
+            {activePage === 'home' && (
+              <HomePage
+                notes={notes}
+                loading={notesLoading}
+                onRefresh={loadNotes}
+                onSelectNote={(note) => setSelectedNote(note)}
+                onNoteCreated={handleNoteCreated}
+                onNoteUpdated={handleNoteUpdated}
+                onNoteDeleted={handleDeleteNote}
+                onToggleSideMenu={toggleSideMenu}
+                activeSpaceId={activeSpaceId}
+                spaces={spaces}
+                onSelectSpace={setActiveSpaceId}
+                onMoveNote={handleMoveNote}
+              />
+            )}
 
-          {activePage === 'archive' && (
-            <ArchivePage
-              notes={notes}
-              loading={notesLoading}
-              onRefresh={loadNotes}
-              onSelectNote={(note) => setSelectedNote(note)}
-              onNoteUpdated={handleNoteUpdated}
-              onNoteDeleted={handleDeleteNote}
-              onBack={() => setActivePage('home')}
-              onToggleSideMenu={toggleSideMenu}
-            />
-          )}
+            {activePage === 'archive' && (
+              <ArchivePage
+                notes={notes}
+                loading={notesLoading}
+                onRefresh={loadNotes}
+                onSelectNote={(note) => setSelectedNote(note)}
+                onNoteUpdated={handleNoteUpdated}
+                onNoteDeleted={handleDeleteNote}
+                onBack={() => setActivePage('home')}
+                onToggleSideMenu={toggleSideMenu}
+              />
+            )}
 
-          {activePage === 'settings' && (
-            <SettingsPage
-              onBack={() => setActivePage('home')}
-              onToggleSideMenu={toggleSideMenu}
-            />
-          )}
-        </div>
+            {activePage === 'settings' && (
+              <SettingsPage
+                onBack={() => setActivePage('home')}
+                onToggleSideMenu={toggleSideMenu}
+              />
+            )}
+          </div>
+        )}
       </div>
-
-      {/* Floating Modal Editor (Compact by default with smooth Fullscreen toggle, keeping the classic style) */}
-      {selectedNote && (
-        <BlockEditorModal
-          note={selectedNote}
-          notes={notes}
-          spaces={spaces}
-          onClose={() => {
-            setSelectedNote(null);
-          }}
-          onNoteUpdated={handleNoteUpdated}
-          onDeleteNote={handleDeleteNote}
-          onOpenNote={async (targetId) => {
-            try {
-              const fullNote = await ApiClient.getNote(targetId);
-              setSelectedNote(fullNote);
-            } catch (err) {
-              console.error('Failed to open linked note', err);
-            }
-          }}
-        />
-      )}
     </div>
   );
 };

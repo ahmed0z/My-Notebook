@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BlockEditorModal } from '../src/components/editor/BlockEditorModal';
 import { SettingsProvider } from '../src/context/SettingsContext';
 import { NoteDto } from '@notebook/shared';
@@ -49,6 +49,9 @@ vi.mock('../src/api/client', () => ({
 }));
 
 describe('BlockEditorModal', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
   it('renders modal with note title and block controls', async () => {
     const note: NoteDto = {
       id: 'n1',
@@ -504,7 +507,7 @@ describe('BlockEditorModal', () => {
     expect(contentColumn).toHaveClass('w-full');
   });
 
-  it('keeps items bounded and does not stretch them in full width mode', async () => {
+  it('toggles between compact mode in middle and notion-style full width mode', async () => {
     localStorage.removeItem('notebook_note_full_width');
     const note: NoteDto = {
       id: 'n1',
@@ -526,24 +529,32 @@ describe('BlockEditorModal', () => {
       />
     );
 
-    // Enter full screen
+    const contentColumn = screen.getByTestId('note-content-column');
+    // Initially in compact mode: centered in middle like v0.0.1
+    expect(contentColumn).toHaveClass('max-w-4xl');
+    expect(contentColumn).toHaveClass('mx-auto');
+
+    // Enter full width
     const fullscreenBtn = screen.getByTitle('Full screen');
     fireEvent.click(fullscreenBtn);
 
-    const contentColumn = screen.getByTestId('note-content-column');
-    expect(contentColumn).toHaveClass('max-w-4xl');
-    expect(contentColumn).not.toHaveClass('max-w-full');
+    // In full width mode: spans full canvas and moves items to left with padding
+    expect(contentColumn).toHaveClass('max-w-full');
+    expect(screen.getByTitle('Exit full screen')).toBeInTheDocument();
 
-    // Open 3-dot options menu
+    // Toggle off: shrinks back into middle
+    fireEvent.click(screen.getByTitle('Exit full screen'));
+    expect(contentColumn).toHaveClass('max-w-4xl');
+    expect(contentColumn).toHaveClass('mx-auto');
+
+    // Open 3-dot options menu and toggle full width switch
     const optionsBtn = screen.getByTitle('Note options');
     fireEvent.click(optionsBtn);
 
-    // Click full width switch
     const fullWidthSwitch = screen.getByRole('switch', { name: /toggle full width/i });
     fireEvent.click(fullWidthSwitch);
 
-    // Content stays bounded at max-w-5xl, never stretched across full monitor
-    expect(contentColumn).toHaveClass('max-w-5xl');
-    expect(contentColumn).not.toHaveClass('max-w-full');
+    // In full width mode again
+    expect(contentColumn).toHaveClass('max-w-full');
   });
 });

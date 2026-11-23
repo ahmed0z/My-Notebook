@@ -70,17 +70,20 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
   const [loading, setLoading] = useState(true);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const { defaultView } = useSettings();
-  const [isFullscreen, setIsFullscreen] = useState(defaultView === 'fullscreen');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+  const [isFullWidth, setIsFullWidth] = useState(() => {
+    if (defaultView === 'fullscreen') return true;
     try {
-      return localStorage.getItem('notebook_in_note_sidebar_open') === 'true';
+      const saved = localStorage.getItem('notebook_note_full_width');
+      if (saved !== null) return saved === 'true';
+      return false;
     } catch {
       return false;
     }
   });
-  const [isFullWidth, setIsFullWidth] = useState(() => {
+  const [isFullscreen, setIsFullscreen] = useState(isFullWidth);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     try {
-      return localStorage.getItem('notebook_note_full_width') === 'true';
+      return localStorage.getItem('notebook_in_note_sidebar_open') === 'true';
     } catch {
       return false;
     }
@@ -91,11 +94,23 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
+  useEffect(() => {
+    if (defaultView === 'fullscreen') {
+      setIsFullWidth(true);
+      setIsFullscreen(true);
+    }
+  }, [defaultView]);
+
   const handleToggleFullWidth = (val: boolean) => {
     setIsFullWidth(val);
+    setIsFullscreen(val);
     try {
       localStorage.setItem('notebook_note_full_width', String(val));
     } catch {}
+  };
+
+  const handleToggleFullscreen = () => {
+    handleToggleFullWidth(!isFullWidth);
   };
 
   const blockSaveTimers = useRef<Record<string, any>>({});
@@ -115,14 +130,14 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
       if (e.key === 'Escape') {
         if (activeMenuBlockId) {
           setActiveMenuBlockId(null);
-        } else if (isFullscreen) {
-          setIsFullscreen(false);
+        } else if (isFullWidth) {
+          handleToggleFullWidth(false);
         }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isFullscreen, activeMenuBlockId]);
+  }, [isFullWidth, activeMenuBlockId]);
 
   // Load full note with blocks
   useEffect(() => {
@@ -701,23 +716,27 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
       data-testid="block-editor-modal-dialog"
       onClick={(e) => e.stopPropagation()}
       style={{ backgroundColor: modalBg }}
-      className={`relative w-full flex flex-col transition-all duration-200 overflow-hidden shadow-2xl border border-stone-200/80 dark:border-stone-800 ${
-        isFullscreen
-          ? 'h-full w-full rounded-none sm:rounded-none'
-          : `${isSidebarOpen ? 'max-w-5xl' : 'max-w-3xl sm:max-w-4xl'} h-full sm:h-[90vh] sm:rounded-3xl rounded-none`
+      className={`relative w-full flex flex-col transition-all duration-200 overflow-hidden ${
+        isEmbedded
+          ? 'h-full rounded-none border-0 shadow-none'
+          : isFullscreen
+            ? 'h-full w-full rounded-none sm:rounded-none shadow-2xl border border-stone-200/80 dark:border-stone-800'
+            : `${isSidebarOpen ? 'max-w-5xl' : 'max-w-3xl sm:max-w-4xl'} h-full sm:h-[90vh] sm:rounded-3xl rounded-none shadow-2xl border border-stone-200/80 dark:border-stone-800`
       }`}
     >
       {/* Modal / Page Header */}
       <div className="flex items-center justify-between p-4 sm:px-8 border-b border-stone-200/40 dark:border-stone-800/60 transition-colors shrink-0">
         <div className="flex items-center flex-1 min-w-0 mr-2">
-          {/* In embedded mode, button to expand master sidebar if collapsed */}
-          {isEmbedded && !isMasterSidebarOpen && onToggleMasterSidebar && (
+          {/* In embedded mode, button to toggle master sidebar */}
+          {isEmbedded && onToggleMasterSidebar && (
             <button
               type="button"
               onClick={onToggleMasterSidebar}
-              title="Open master sidebar"
-              aria-label="Open master sidebar"
-              className="p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 transition mr-2 shrink-0 text-stone-500 dark:text-stone-400"
+              title={isMasterSidebarOpen ? "Collapse sidebar (Ctrl+\\)" : "Expand sidebar (Ctrl+\\)"}
+              aria-label={isMasterSidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+              className={`p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 transition mr-2 shrink-0 ${
+                isMasterSidebarOpen ? 'text-amber-600 dark:text-amber-400' : 'text-stone-500 dark:text-stone-400'
+              }`}
             >
               <PanelLeft className="w-4 h-4" />
             </button>
@@ -744,7 +763,7 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="hover:text-stone-900 dark:hover:text-stone-100 font-medium transition"
+                className="hover:text-stone-900 dark:hover:text-stone-100 font-medium transition cursor-pointer"
               >
                 Notes
               </button>
@@ -820,12 +839,12 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
           {/* Fullscreen Toggle */}
           <button
             type="button"
-            onClick={() => setIsFullscreen(!isFullscreen)}
-            title={isFullscreen ? 'Exit full screen' : 'Full screen'}
-            aria-label={isFullscreen ? 'Exit full screen' : 'Full screen'}
+            onClick={handleToggleFullscreen}
+            title={isFullWidth ? 'Exit full screen' : 'Full screen'}
+            aria-label={isFullWidth ? 'Exit full screen' : 'Full screen'}
             className="p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 transition"
           >
-            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            {isFullWidth ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
 
           {/* Close */}
@@ -859,17 +878,15 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
           data-testid="modal-editor-content-area"
           onPaste={handleCanvasPaste}
           className={`flex-1 min-w-0 w-full h-full overflow-y-auto custom-scrollbar flex flex-col ${
-            isFullscreen ? 'max-w-7xl' : ''
+            !isEmbedded && isFullscreen ? 'max-w-7xl' : ''
           }`}
         >
           <div
             data-testid="note-content-column"
-            className={`flex-1 flex flex-col w-full p-4 sm:p-8 pb-32 transition-all duration-200 ${
-              isFullscreen
-                ? isFullWidth
-                  ? 'max-w-5xl mx-auto px-6 sm:px-12'
-                  : 'max-w-4xl mx-auto px-6 sm:px-12'
-                : 'w-full'
+            className={`flex-1 flex flex-col w-full pb-32 transition-all duration-300 ease-in-out ${
+              isFullWidth
+                ? 'w-full max-w-full px-8 sm:px-12 md:px-16 py-8'
+                : 'max-w-4xl mx-auto px-6 sm:px-8 py-8'
             }`}
           >
             {loading ? (
