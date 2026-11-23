@@ -209,7 +209,7 @@ export const ImageBlock: React.FC<ImageBlockProps> = ({ content, onChange, onDel
       </div>
 
       {/* Image Preview */}
-      <div className="w-full flex justify-center overflow-hidden rounded-xl bg-stone-100 dark:bg-stone-800/50 border border-stone-200/60 dark:border-stone-700/60">
+      <div className="inline-flex max-w-fit mx-auto overflow-hidden rounded-xl bg-stone-100 dark:bg-stone-800/50 border border-stone-200/60 dark:border-stone-700/60">
         <img
           src={url}
           alt={caption || 'Note image'}

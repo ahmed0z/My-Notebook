@@ -262,5 +262,18 @@ describe('ImageBlock (Web)', () => {
         })
       );
     });
+
+    it('wraps rendered image in an auto-fitting container without stretching background to full width', () => {
+      render(
+        <ImageBlock
+          content={{ url: 'https://example.com/test.png', caption: 'Test photo' }}
+          onChange={() => {}}
+        />
+      );
+      const img = screen.getByAltText('Test photo');
+      const container = img.closest('div');
+      expect(container).toHaveClass('max-w-fit');
+      expect(container).not.toHaveClass('w-full');
+    });
   });
 });
