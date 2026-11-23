@@ -524,4 +524,20 @@ describe('TableBlock (Web)', () => {
       });
     });
   });
+
+  it('sizes table strictly to column widths without forcing 100% min-width', () => {
+    render(
+      <TableBlock
+        content={{
+          columns: ['Col A', 'Col B'],
+          rows: [['1', '2']],
+          columnWidths: [150, 150],
+        }}
+        onChange={() => {}}
+      />
+    );
+    const table = screen.getByRole('table');
+    expect(table.style.minWidth).toBe('');
+    expect(table.style.width).toBe('340px'); // 150 + 150 + 40px action col
+  });
 });

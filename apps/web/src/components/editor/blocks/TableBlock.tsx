@@ -753,7 +753,6 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
           className="border-collapse text-sm select-text table-fixed"
           style={{
             width: `${activeColWidths.reduce((a, b) => a + b, 0) + 40}px`,
-            minWidth: '100%',
           }}
         >
           <colgroup>
