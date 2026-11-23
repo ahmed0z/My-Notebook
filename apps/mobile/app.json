@@ -2,7 +2,7 @@
   "expo": {
     "name": "NoteBook",
     "slug": "notebook-mobile",
-    "version": "0.0.1-beta",
+    "version": "0.1.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",

@@ -364,7 +364,7 @@ export const SideMenu: React.FC<SideMenuProps> = ({
             </p>
             <div className="flex items-center justify-between gap-1 text-[11px] text-stone-400 dark:text-stone-500">
               <span className="truncate">Personal Workspace</span>
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 font-medium shrink-0">v0.0.1-beta</span>
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 font-medium shrink-0">v0.1.1</span>
             </div>
           </div>
         </div>

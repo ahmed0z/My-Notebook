@@ -1,7 +1,7 @@
 # NoteBook Application — Current Status & Overview 📓
 
-**Current Version:** `0.0.1-beta`  
-**Git Tag:** [`v0.0.1-beta`](https://github.com/ahmed0z/My-Notebook/releases/tag/v0.0.1-beta)  
+**Current Version:** `0.1.1`  
+**Git Tag:** [`v0.1.1`](https://github.com/ahmed0z/My-Notebook/releases/tag/v0.1.1)  
 **Production URL:** [https://mynotebook.runasp.net/](https://mynotebook.runasp.net/)  
 **GitHub Repository:** [https://github.com/ahmed0z/My-Notebook](https://github.com/ahmed0z/My-Notebook)  
 **Last Updated:** November 2026
@@ -18,7 +18,7 @@ The app is built as a multi-tenant web application on top of **.NET 8** (ASP.NET
 
 ## 2. Where We Are Now (Current Status)
 
-The project has reached **Milestone `0.0.1-beta`** and is deployed live on MonsterASP.
+The project has reached **Milestone `0.1.1`** and is deployed live on MonsterASP.
 
 ### Key Milestones Completed:
 

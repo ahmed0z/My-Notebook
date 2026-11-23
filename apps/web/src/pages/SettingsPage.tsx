@@ -641,7 +641,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           <span>NoteBook</span>
           <span>•</span>
           <span className="font-mono text-[11px] px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 border border-stone-200 dark:border-stone-700 font-medium">
-            v0.0.1-beta
+            v0.1.1
           </span>
         </div>
       </main>

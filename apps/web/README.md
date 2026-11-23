@@ -1,14 +1,14 @@
 # NoteBook Web Client 🌐
 
 **Package:** `@notebook/web`  
-**Version:** `0.0.1-beta`  
+**Version:** `0.1.1`  
 **Live Site:** [https://mynotebook.runasp.net/](https://mynotebook.runasp.net/)  
 
 The web client for NoteBook, built with **React 18**, **TypeScript**, **Vite**, **Tailwind CSS**, and **Material Design 3**.
 
 ---
 
-## Current Status (v0.0.1-beta)
+## Current Status (v0.1.1)
 
 - **Authentication & Sign Up:**
   - Modern sign-in and public registration tabbed interface with Material Design 3 pill segmented controls.
