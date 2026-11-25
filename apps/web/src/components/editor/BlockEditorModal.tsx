@@ -368,8 +368,13 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
       });
     } else if (type === 'table') {
       initialContentJson = JSON.stringify({
-        columns: extraContent?.columns || ['Column 1', 'Column 2'],
-        rows: extraContent?.rows || [['', '']]
+        columns: Array.isArray(extraContent?.columns) && extraContent.columns.length ? extraContent.columns : ['', ''],
+        rows: Array.isArray(extraContent?.rows) ? extraContent.rows : [['', '']],
+        hasHeaderRow: extraContent?.hasHeaderRow ?? true,
+        hasHeaderColumn: extraContent?.hasHeaderColumn ?? false,
+        fitToWidth: extraContent?.fitToWidth ?? false,
+        ...(extraContent?.columnWidths ? { columnWidths: extraContent.columnWidths } : {}),
+        ...(extraContent?.rowHeights ? { rowHeights: extraContent.rowHeights } : {})
       });
     } else if (type === 'image') {
       initialContentJson = JSON.stringify({
@@ -529,7 +534,13 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
     } else if (targetType === 'table') {
       const lines = extractedText.split('\n').filter((l: string) => l.trim().length > 0);
       const rows = lines.length > 0 ? lines.map((l: string) => [l, '']) : [['', '']];
-      newContentObj = { columns: ['Column 1', 'Column 2'], rows };
+      newContentObj = {
+        columns: ['', ''],
+        rows,
+        hasHeaderRow: true,
+        hasHeaderColumn: false,
+        fitToWidth: false
+      };
     } else if (targetType === 'image') {
       newContentObj = { url: '', caption: extractedText };
     }
@@ -917,8 +928,9 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
                     parsedContent = { items: Array.isArray(parsedContent.items) ? parsedContent.items : [{ id: '1', text: '', checked: false }] };
                   } else if (block.type === 'table') {
                     parsedContent = {
-                      columns: Array.isArray(parsedContent.columns) && parsedContent.columns.length ? parsedContent.columns : ['Column 1', 'Column 2'],
-                      rows: Array.isArray(parsedContent.rows) && parsedContent.rows.length ? parsedContent.rows : [['', '']]
+                      ...parsedContent,
+                      columns: Array.isArray(parsedContent.columns) && parsedContent.columns.length ? parsedContent.columns : ['', ''],
+                      rows: Array.isArray(parsedContent.rows) ? parsedContent.rows : [['', '']]
                     };
                   } else if (block.type === 'image') {
                     parsedContent = { url: parsedContent.url || '', caption: parsedContent.caption || '' };

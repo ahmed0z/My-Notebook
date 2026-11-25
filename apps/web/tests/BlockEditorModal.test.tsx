@@ -188,7 +188,20 @@ describe('BlockEditorModal', () => {
     // Click Table
     const tableBtn = screen.getByRole('button', { name: /table/i });
     fireEvent.click(tableBtn);
-    expect(await screen.findByText('Column 1')).toBeInTheDocument();
+    expect(await screen.findByRole('table')).toBeInTheDocument();
+    expect(screen.queryByText('Column 1')).not.toBeInTheDocument();
+    expect(ApiClient.addBlock).toHaveBeenCalledWith(
+      'n1',
+      'table',
+      JSON.stringify({
+        columns: ['', ''],
+        rows: [['', '']],
+        hasHeaderRow: true,
+        hasHeaderColumn: false,
+        fitToWidth: false
+      }),
+      expect.any(Number)
+    );
 
     // Click Image
     const imageBtn = screen.getByRole('button', { name: /image/i });
@@ -743,5 +756,144 @@ describe('BlockEditorModal', () => {
     // Ensure Note 2's title remains intact and is not overwritten by Note 1
     expect(screen.queryByDisplayValue('Edited Note 1')).not.toBeInTheDocument();
     expect(screen.getByDisplayValue('Note 2')).toBeInTheDocument();
+  });
+
+  it('preserves table columnWidths, rowHeights, hasHeaderRow, hasHeaderColumn, fitToWidth, and 1-row empty rows across render and cell edit', async () => {
+    const tableContent = {
+      columns: ['Item', 'Notes'],
+      rows: [['Alpha', 'Beta']],
+      columnWidths: [240, 180],
+      rowHeights: [48],
+      hasHeaderRow: false,
+      hasHeaderColumn: true,
+      fitToWidth: true
+    };
+    const noteWithTable: NoteDto = {
+      id: 'note-table-meta',
+      title: 'Table Meta Note',
+      color: '#ffffff',
+      position: 0,
+      isPinned: false,
+      isArchived: false,
+      createdAt: '',
+      updatedAt: '',
+      blocks: [
+        {
+          id: 'tb1',
+          noteId: 'note-table-meta',
+          type: 'table',
+          content: tableContent,
+          position: 0,
+          createdAt: '',
+          updatedAt: ''
+        }
+      ]
+    };
+
+    (ApiClient.getNote as any).mockResolvedValueOnce(noteWithTable);
+    const onNoteUpdated = vi.fn();
+
+    render(<BlockEditorModal note={noteWithTable} onClose={() => {}} onNoteUpdated={onNoteUpdated} />);
+
+    const table = await screen.findByRole('table');
+    expect(table).toHaveStyle({ width: '100%', minWidth: '420px' });
+
+    const cols = table.querySelectorAll('colgroup col');
+    expect(cols).toHaveLength(2);
+    expect(cols[0]).toHaveStyle({ width: '240px' });
+    expect(cols[1]).toHaveStyle({ width: '180px' });
+
+    // hasHeaderRow: false, hasHeaderColumn: true -> col 0 cells have header fill, col 1 header cell does not
+    const th0 = table.querySelector('th[data-col-index="0"]');
+    const th1 = table.querySelector('th[data-col-index="1"]');
+    const td0 = table.querySelector('td[data-row-index="0"][data-col-index="0"]');
+    const td1 = table.querySelector('td[data-row-index="0"][data-col-index="1"]');
+    expect(th0).toHaveClass('bg-stone-100/70');
+    expect(th1).not.toHaveClass('bg-stone-100/70');
+    expect(td0).toHaveClass('bg-stone-100/70');
+    expect(td1).not.toHaveClass('bg-stone-100/70');
+
+    // Edit cell (0, 1) and verify metadata persists in state and rendered DOM
+    const editableCell = td1?.querySelector('[contenteditable="true"]') as HTMLElement;
+    expect(editableCell).toBeTruthy();
+    editableCell.textContent = 'Updated Beta';
+    fireEvent.input(editableCell);
+
+    await waitFor(() => {
+      expect(onNoteUpdated).toHaveBeenCalled();
+    });
+    const lastCallNote = onNoteUpdated.mock.calls[onNoteUpdated.mock.calls.length - 1][0];
+    const updatedTableBlock = lastCallNote.blocks.find((b: any) => b.id === 'tb1');
+    expect(updatedTableBlock.content).toEqual({
+      ...tableContent,
+      rows: [['Alpha', 'Updated Beta']]
+    });
+
+    // Rendered DOM still keeps 240px width and header column styling after re-render
+    expect(table.querySelectorAll('colgroup col')[0]).toHaveStyle({ width: '240px' });
+    expect(table.querySelector('th[data-col-index="1"]')).not.toHaveClass('bg-stone-100/70');
+    expect(table.querySelector('td[data-row-index="0"][data-col-index="0"]')).toHaveClass('bg-stone-100/70');
+  });
+
+  it('preserves 1-row tables with rows: [] and creates blank headers when converting text to table', async () => {
+    const oneRowNote: NoteDto = {
+      id: 'note-1row',
+      title: 'One Row Table Note',
+      color: '#ffffff',
+      position: 0,
+      isPinned: false,
+      isArchived: false,
+      createdAt: '',
+      updatedAt: '',
+      blocks: [
+        {
+          id: 'tb-1row',
+          noteId: 'note-1row',
+          type: 'table',
+          content: { columns: ['Only Header 1', 'Only Header 2'], rows: [] },
+          position: 0,
+          createdAt: '',
+          updatedAt: ''
+        },
+        {
+          id: 'txt-1',
+          noteId: 'note-1row',
+          type: 'text',
+          content: { text: 'Convert me', level: 'paragraph' },
+          position: 1,
+          createdAt: '',
+          updatedAt: ''
+        }
+      ]
+    };
+
+    (ApiClient.getNote as any).mockResolvedValueOnce(oneRowNote);
+
+    render(<BlockEditorModal note={oneRowNote} onClose={() => {}} onNoteUpdated={() => {}} />);
+
+    const table = await screen.findByRole('table');
+    expect(table.querySelectorAll('tbody tr')).toHaveLength(0);
+
+    // Convert text block to table via block options menu
+    const handleButtons = screen.getAllByRole('button', { name: /drag to move or click for options/i });
+    const textBlockWrapper = handleButtons[1].closest('[data-testid="block-wrapper"]') as HTMLElement;
+    fireEvent.click(handleButtons[1]);
+    const convertToTableBtn = within(textBlockWrapper).getByRole('button', { name: /^table$/i });
+    fireEvent.click(convertToTableBtn);
+
+    await waitFor(() => {
+      expect(ApiClient.addBlock).toHaveBeenCalledWith(
+        'note-1row',
+        'table',
+        JSON.stringify({
+          columns: ['', ''],
+          rows: [['Convert me', '']],
+          hasHeaderRow: true,
+          hasHeaderColumn: false,
+          fitToWidth: false
+        }),
+        1
+      );
+    });
   });
 });
