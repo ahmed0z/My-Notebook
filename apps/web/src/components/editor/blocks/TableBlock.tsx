@@ -1,28 +1,55 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useLayoutEffect, useCallback } from 'react';
 import { TableBlockContent } from '@notebook/shared';
-import { Plus, Trash2, Table } from 'lucide-react';
+import { Plus, GripVertical, MoreHorizontal, SlidersHorizontal } from 'lucide-react';
 import { parseClipboardTableData } from '../utils/clipboardTableParser';
+import { TableCell, CellNavDirection } from './TableCell';
+import {
+  RowActionMenu,
+  ColumnActionMenu,
+  TableOptionsMenu,
+} from './TableContextMenus';
+import {
+  CellCoord,
+  CellRange,
+  normalizeRange,
+  isCellInRange,
+  computeSelectionBoxShadow,
+  escapeTsvCell,
+  serializeRangeToTsv,
+  insertRowAt,
+  duplicateRowAt,
+  clearRowAt,
+  deleteRowAt,
+  reorderRow,
+  insertColAt,
+  duplicateColAt,
+  clearColAt,
+  deleteColAt,
+  sortCol,
+  reorderCol,
+  clearRangeCells,
+} from './tableUtils';
 
 interface TableBlockProps {
   content: TableBlockContent;
   onChange: (updated: TableBlockContent) => void;
 }
 
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
+type ActiveMenu =
+  | { type: 'options' }
+  | { type: 'row'; index: number; top: number; left: number }
+  | { type: 'col'; index: number; top: number; left: number }
+  | null;
 
-const escapeTsvCell = (val: string) => {
-  if (val.includes('\t') || val.includes('\n') || val.includes('\r') || val.includes('"')) {
-    return `"${val.replace(/"/g, '""')}"`;
-  }
-  return val;
-};
+const DEFAULT_COL_WIDTH = 150;
+const DEFAULT_ROW_HEIGHT = 32;
+const MIN_COL_WIDTH = 60;
+const MAX_COL_WIDTH = 800;
+const DRAG_THRESHOLD_PX = 4;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
 
 function parseCsvLine(line: string): string[] {
   const result: string[] = [];
@@ -48,170 +75,362 @@ function parseCsvLine(line: string): string[] {
   return result;
 }
 
-interface EditableCellProps {
-  value: string;
-  placeholder?: string;
-  onChange: (val: string) => void;
-  onEnterDown?: () => void;
-  isHeader?: boolean;
-  className?: string;
+function readEditableText(el: HTMLElement): string {
+  const raw = el.innerText !== undefined ? el.innerText : (el.textContent || '');
+  return raw.replace(/\r\n/g, '\n');
 }
 
-const EditableCell: React.FC<EditableCellProps> = ({
-  value,
-  placeholder,
-  onChange,
-  onEnterDown,
-  isHeader,
-  className,
-}) => {
-  const ref = useRef<HTMLDivElement>(null);
+function placeCaret(el: HTMLElement, position: 'start' | 'end') {
+  try {
+    const selection = window.getSelection();
+    if (!selection) return;
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(position === 'start');
+    selection.removeAllRanges();
+    selection.addRange(range);
+  } catch {
+    // Selection API may not be fully supported in headless environments
+  }
+}
 
-  // Keep DOM text in sync with external value updates when not focused
-  useEffect(() => {
-    if (ref.current && document.activeElement !== ref.current) {
-      if (ref.current.textContent !== value) {
-        ref.current.textContent = value;
-      }
+function writeClipboardText(text: string): void {
+  if (navigator.clipboard?.writeText) {
+    void navigator.clipboard.writeText(text).catch(() => {});
+    return;
+  }
+  try {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+  } catch {
+    // Ignore fallback copy failures
+  }
+}
+
+function findGapIndex(clientPos: number, rects: DOMRect[], axis: 'x' | 'y'): number {
+  for (let i = 0; i < rects.length; i++) {
+    const mid =
+      axis === 'y'
+        ? rects[i].top + rects[i].height / 2
+        : rects[i].left + rects[i].width / 2;
+    if (clientPos < mid) {
+      return i;
     }
-  }, [value]);
-
-  return (
-    <div
-      ref={ref}
-      contentEditable
-      suppressContentEditableWarning
-      data-placeholder={placeholder}
-      onInput={(e) => {
-        // If content is cleared, reset innerHTML so :empty pseudo-class matches
-        if (!e.currentTarget.textContent) {
-          e.currentTarget.innerHTML = '';
-        }
-      }}
-      onBlur={(e) => {
-        const text = e.currentTarget.innerText !== undefined ? e.currentTarget.innerText : (e.currentTarget.textContent || '');
-        if (text !== value) {
-          onChange(text);
-        }
-      }}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' && e.shiftKey) {
-          if (isHeader) {
-            e.preventDefault();
-          }
-          return;
-        }
-        if (e.key === 'Enter' && !e.shiftKey) {
-          e.preventDefault();
-          const text = e.currentTarget.innerText !== undefined ? e.currentTarget.innerText : (e.currentTarget.textContent || '');
-          if (text !== value) {
-            onChange(text);
-          }
-          onEnterDown?.();
-        }
-      }}
-      className={className}
-      dangerouslySetInnerHTML={{ __html: escapeHtml(value) }}
-    />
-  );
-};
+  }
+  return rects.length;
+}
 
 export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => {
   const tableRef = useRef<HTMLDivElement>(null);
+  const tableBoxRef = useRef<HTMLDivElement>(null);
+  const tableElRef = useRef<HTMLTableElement>(null);
+  const thRefs = useRef<(HTMLTableCellElement | null)[]>([]);
+
   const [copied, setCopied] = useState(false);
   const [pasted, setPasted] = useState(false);
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pastedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  interface CellCoord {
-    row: number; // -1 for header, 0..rows.length - 1 for body
-    col: number; // 0..columns.length - 1
-  }
-
-  const [selectedRange, setSelectedRange] = useState<{
-    start: CellCoord;
-    end: CellCoord;
-  } | null>(null);
+  const [selectedRange, setSelectedRange] = useState<CellRange | null>(null);
   const [isSelecting, setIsSelecting] = useState(false);
   const dragStartRef = useRef<CellCoord | null>(null);
-  const pendingFocusRef = useRef<{ row: number; col: number } | null>(null);
+  const anchorRef = useRef<CellCoord | null>(null);
+  const focusedCellRef = useRef<CellCoord | null>(null);
+  const pendingFocusRef = useRef<{ row: number; col: number; caret: 'start' | 'end' } | null>(null);
 
-  const focusCell = (r: number, c: number) => {
-    const selector = r === -1
-      ? `th[data-col-index="${c}"] [contenteditable]`
-      : `td[data-row-index="${r}"][data-col-index="${c}"] [contenteditable]`;
-    const cellEl = tableRef.current?.querySelector(selector) as HTMLElement | null;
-    if (cellEl) {
-      cellEl.focus();
-      try {
-        const selection = window.getSelection();
-        if (selection) {
-          const range = document.createRange();
-          range.selectNodeContents(cellEl);
-          range.collapse(false);
-          selection.removeAllRanges();
-          selection.addRange(range);
-        }
-      } catch {
-        // Selection API may not be fully supported in headless test environments
+  const [hoveredRow, setHoveredRow] = useState<number | null>(null);
+  const [hoveredCol, setHoveredCol] = useState<number | null>(null);
+  const [activeMenu, setActiveMenu] = useState<ActiveMenu>(null);
+
+  const [resizingCol, setResizingCol] = useState<{
+    index: number;
+    currentWidth: number;
+  } | null>(null);
+  const [measuredColEdges, setMeasuredColEdges] = useState<number[]>([]);
+
+  const [dragRow, setDragRow] = useState<{
+    fromIndex: number;
+    targetIndex: number;
+    lineTop: number;
+  } | null>(null);
+  const [dragCol, setDragCol] = useState<{
+    fromIndex: number;
+    targetIndex: number;
+    lineLeft: number;
+  } | null>(null);
+
+  const columns = content?.columns?.length ? content.columns : ['', ''];
+  const rows = Array.isArray(content?.rows) ? content.rows : [['', '']];
+  const hasHeaderRow = content?.hasHeaderRow !== false;
+  const hasHeaderColumn = content?.hasHeaderColumn === true;
+  const fitToWidth = content?.fitToWidth === true;
+
+  const contentRef = useRef(content);
+  contentRef.current = content;
+  const columnsRef = useRef(columns);
+  columnsRef.current = columns;
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+  const activeMenuRef = useRef(activeMenu);
+  activeMenuRef.current = activeMenu;
+
+  const getNormalizedContent = useCallback((): TableBlockContent => {
+    return {
+      ...contentRef.current,
+      columns: columnsRef.current,
+      rows: rowsRef.current,
+    };
+  }, []);
+
+  const flashCopied = useCallback(() => {
+    setCopied(true);
+    if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+    copiedTimerRef.current = setTimeout(() => setCopied(false), 2000);
+  }, []);
+
+  const flashPasted = useCallback(() => {
+    setPasted(true);
+    if (pastedTimerRef.current) clearTimeout(pastedTimerRef.current);
+    pastedTimerRef.current = setTimeout(() => setPasted(false), 2000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+      if (pastedTimerRef.current) clearTimeout(pastedTimerRef.current);
+    };
+  }, []);
+
+  const activeColWidths = columns.map((_, i) =>
+    resizingCol && resizingCol.index === i
+      ? resizingCol.currentWidth
+      : (content.columnWidths?.[i] ?? DEFAULT_COL_WIDTH)
+  );
+  const totalColWidth = activeColWidths.reduce((sum, w) => sum + w, 0);
+
+  const cumulativeColEdges = activeColWidths.reduce<number[]>((acc, width, idx) => {
+    const prev = idx > 0 ? acc[idx - 1] : 0;
+    acc.push(prev + width);
+    return acc;
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!fitToWidth) {
+      setMeasuredColEdges([]);
+      return;
+    }
+    const edges = columns.map((_, ci) => {
+      const th = thRefs.current[ci];
+      if (th && th.offsetWidth > 0) {
+        return th.offsetLeft + th.offsetWidth;
       }
+      return 0;
+    });
+    if (edges.some((e) => e > 0)) {
+      setMeasuredColEdges(edges);
+    } else {
+      setMeasuredColEdges([]);
+    }
+  }, [fitToWidth, columns.length, totalColWidth]);
+
+  const blurActiveEditable = useCallback(() => {
+    const activeEl = document.activeElement as HTMLElement | null;
+    if (
+      activeEl &&
+      tableRef.current?.contains(activeEl) &&
+      activeEl.getAttribute('contenteditable') === 'true'
+    ) {
+      activeEl.blur();
+    }
+  }, []);
+
+  const getCellEditable = useCallback((r: number, c: number): HTMLElement | null => {
+    const selector =
+      r === -1
+        ? `th[data-col-index="${c}"] [contenteditable="true"]`
+        : `td[data-row-index="${r}"][data-col-index="${c}"] [contenteditable="true"]`;
+    return (tableRef.current?.querySelector(selector) as HTMLElement | null) ?? null;
+  }, []);
+
+  const focusCell = useCallback(
+    (r: number, c: number, caret: 'start' | 'end' = 'end') => {
+      const cellEl = getCellEditable(r, c);
+      if (!cellEl) return;
+      cellEl.focus();
+      focusedCellRef.current = { row: r, col: c };
+      placeCaret(cellEl, caret);
+    },
+    [getCellEditable]
+  );
+
+  useEffect(() => {
+    if (pendingFocusRef.current) {
+      const { row, col, caret } = pendingFocusRef.current;
+      pendingFocusRef.current = null;
+      focusCell(row, col, caret);
+    }
+  }, [rows.length, columns.length, focusCell]);
+
+  const selectWholeTable = useCallback(() => {
+    setSelectedRange({
+      start: { row: -1, col: 0 },
+      end: { row: rowsRef.current.length - 1, col: columnsRef.current.length - 1 },
+    });
+  }, []);
+
+  const updateCellValue = useCallback(
+    (rowIndex: number, colIndex: number, val: string) => {
+      const base = getNormalizedContent();
+      if (rowIndex === -1) {
+        const nextCols = base.columns.map((c, ci) => (ci === colIndex ? val : c));
+        onChange({ ...base, columns: nextCols });
+        return;
+      }
+      const nextRows = base.rows.map((r, ri) =>
+        ri === rowIndex ? r.map((c, ci) => (ci === colIndex ? val : c)) : r
+      );
+      onChange({ ...base, rows: nextRows });
+    },
+    [getNormalizedContent, onChange]
+  );
+
+  const handleCellNavigate = useCallback(
+    (direction: CellNavDirection, rowIndex: number, colIndex: number) => {
+      const colCount = columnsRef.current.length;
+      const rowCount = rowsRef.current.length;
+
+      if (direction === 'next') {
+        if (colIndex < colCount - 1) {
+          focusCell(rowIndex, colIndex + 1, 'end');
+        } else if (rowIndex < rowCount - 1) {
+          focusCell(rowIndex + 1, 0, 'end');
+        } else {
+          const base = getNormalizedContent();
+          const newRow = new Array<string>(colCount).fill('');
+          const newRowHeights = base.rowHeights
+            ? [...base.rowHeights, DEFAULT_ROW_HEIGHT]
+            : undefined;
+          pendingFocusRef.current = { row: rowCount, col: 0, caret: 'start' };
+          onChange({
+            ...base,
+            rows: [...base.rows, newRow],
+            ...(newRowHeights !== undefined ? { rowHeights: newRowHeights } : {}),
+          });
+        }
+        return;
+      }
+
+      if (direction === 'prev' || direction === 'left') {
+        const caret = direction === 'left' ? 'end' : 'end';
+        if (colIndex > 0) {
+          focusCell(rowIndex, colIndex - 1, caret);
+        } else if (rowIndex > 0) {
+          focusCell(rowIndex - 1, colCount - 1, caret);
+        } else if (rowIndex === 0) {
+          focusCell(-1, colCount - 1, caret);
+        }
+        return;
+      }
+
+      if (direction === 'right') {
+        if (colIndex < colCount - 1) {
+          focusCell(rowIndex, colIndex + 1, 'start');
+        } else if (rowIndex < rowCount - 1) {
+          focusCell(rowIndex + 1, 0, 'start');
+        }
+        return;
+      }
+
+      if (direction === 'up') {
+        if (rowIndex > 0) {
+          focusCell(rowIndex - 1, colIndex, 'end');
+        } else if (rowIndex === 0) {
+          focusCell(-1, colIndex, 'end');
+        }
+        return;
+      }
+
+      if (direction === 'down') {
+        if (rowIndex < rowCount - 1) {
+          focusCell(rowIndex + 1, colIndex, 'start');
+        }
+      }
+    },
+    [focusCell, getNormalizedContent, onChange]
+  );
+
+  const handleEscapeToSelect = useCallback((rowIndex: number, colIndex: number) => {
+    const coord = { row: rowIndex, col: colIndex };
+    anchorRef.current = coord;
+    setSelectedRange({ start: coord, end: coord });
+  }, []);
+
+  const handleCellMouseDown = (e: React.MouseEvent, r: number, c: number) => {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('.cursor-col-resize')) {
+      return;
+    }
+
+    if (e.shiftKey) {
+      e.preventDefault();
+      blurActiveEditable();
+      window.getSelection()?.removeAllRanges();
+      const anchor =
+        anchorRef.current ??
+        focusedCellRef.current ??
+        selectedRange?.start ??
+        { row: r, col: c };
+      anchorRef.current = anchor;
+      setSelectedRange({ start: anchor, end: { row: r, col: c } });
+      return;
+    }
+
+    dragStartRef.current = { row: r, col: c };
+    anchorRef.current = { row: r, col: c };
+    setIsSelecting(true);
+    setSelectedRange(null);
+  };
+
+  const handleCellMouseEnter = (r: number, c: number) => {
+    setHoveredRow(r);
+    setHoveredCol(c);
+    if (!isSelecting || !dragStartRef.current) return;
+    const start = dragStartRef.current;
+    if (start.row !== r || start.col !== c) {
+      blurActiveEditable();
+      window.getSelection()?.removeAllRanges();
+      setSelectedRange({ start, end: { row: r, col: c } });
     }
   };
 
-  const columns = content?.columns?.length ? content.columns : ['Column 1', 'Column 2'];
-  const rows = content?.rows?.length ? content.rows : [['', '']];
-
-  // Column width & row height resizing state
-  const [resizingCol, setResizingCol] = useState<{
-    index: number;
-    startX: number;
-    startWidth: number;
-    currentWidth: number;
-  } | null>(null);
-
-  const [resizingRow, setResizingRow] = useState<{
-    index: number;
-    startY: number;
-    startHeight: number;
-    currentHeight: number;
-  } | null>(null);
-
-  const activeColWidths = columns.map((_, i) => {
-    if (resizingCol && resizingCol.index === i) {
-      return resizingCol.currentWidth;
-    }
-    return content.columnWidths?.[i] ?? 150;
-  });
-
-  const activeRowHeights = rows.map((_, i) => {
-    if (resizingRow && resizingRow.index === i) {
-      return resizingRow.currentHeight;
-    }
-    return content.rowHeights?.[i] ?? 36;
-  });
-
+  // Column resize handlers
   const handleColResizeStart = (e: React.MouseEvent, ci: number) => {
     e.preventDefault();
     e.stopPropagation();
 
     const startX = e.clientX;
-    const startWidth = content.columnWidths?.[ci] ?? 150;
+    const measuredWidth =
+      fitToWidth && thRefs.current[ci]?.offsetWidth
+        ? thRefs.current[ci]!.offsetWidth
+        : (contentRef.current.columnWidths?.[ci] ?? DEFAULT_COL_WIDTH);
 
-    setResizingCol({
-      index: ci,
-      startX,
-      startWidth,
-      currentWidth: startWidth,
-    });
+    setResizingCol({ index: ci, currentWidth: measuredWidth });
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       moveEvent.preventDefault();
-      const deltaX = moveEvent.clientX - startX;
-      const newWidth = Math.max(70, Math.min(800, startWidth + deltaX));
-      setResizingCol({
-        index: ci,
-        startX,
-        startWidth,
-        currentWidth: newWidth,
-      });
+      const nextWidth = clamp(
+        measuredWidth + (moveEvent.clientX - startX),
+        MIN_COL_WIDTH,
+        MAX_COL_WIDTH
+      );
+      setResizingCol({ index: ci, currentWidth: nextWidth });
     };
 
     const handleMouseUp = (upEvent: MouseEvent) => {
@@ -220,18 +439,17 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
 
-      const deltaX = upEvent.clientX - startX;
-      const finalWidth = Math.max(70, Math.min(800, startWidth + deltaX));
-
-      const updatedWidths = columns.map((_, i) =>
-        i === ci ? finalWidth : (content.columnWidths?.[i] ?? 150)
+      const finalWidth = clamp(
+        measuredWidth + (upEvent.clientX - startX),
+        MIN_COL_WIDTH,
+        MAX_COL_WIDTH
       );
-
+      const base = getNormalizedContent();
+      const updatedWidths = base.columns.map((_, idx) =>
+        idx === ci ? finalWidth : (base.columnWidths?.[idx] ?? DEFAULT_COL_WIDTH)
+      );
       setResizingCol(null);
-      onChange({
-        ...content,
-        columnWidths: updatedWidths,
-      });
+      onChange({ ...base, columnWidths: updatedWidths });
     };
 
     document.body.style.cursor = 'col-resize';
@@ -241,127 +459,174 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
   };
 
   const resetColWidth = (ci: number) => {
-    const updatedWidths = columns.map((_, i) =>
-      i === ci ? 150 : (content.columnWidths?.[i] ?? 150)
+    const base = getNormalizedContent();
+    const updatedWidths = base.columns.map((_, idx) =>
+      idx === ci ? DEFAULT_COL_WIDTH : (base.columnWidths?.[idx] ?? DEFAULT_COL_WIDTH)
     );
-    onChange({
-      ...content,
-      columnWidths: updatedWidths,
-    });
+    onChange({ ...base, columnWidths: updatedWidths });
   };
 
-  const handleRowResizeStart = (e: React.MouseEvent, ri: number) => {
+  const getRelativeAnchor = (triggerEl: HTMLElement): { top: number; left: number } => {
+    const containerRect = tableRef.current?.getBoundingClientRect();
+    const triggerRect = triggerEl.getBoundingClientRect();
+    if (!containerRect || (triggerRect.width === 0 && triggerRect.height === 0)) {
+      return { top: 0, left: 0 };
+    }
+    return {
+      top: Math.max(0, triggerRect.bottom - containerRect.top + 4),
+      left: Math.max(0, triggerRect.left - containerRect.left),
+    };
+  };
+
+  // Row pill handle: <=4px click opens menu + selects row; >4px drag reorders rows
+  const handleRowHandleMouseDown = (e: React.MouseEvent<HTMLButtonElement>, ri: number) => {
+    if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
 
+    const triggerEl = e.currentTarget;
+    const startX = e.clientX;
     const startY = e.clientY;
-    const startHeight = content.rowHeights?.[ri] ?? 36;
+    let hasDragged = false;
+    let latestTarget = ri;
 
-    setResizingRow({
-      index: ri,
-      startY,
-      startHeight,
-      currentHeight: startHeight,
-    });
+    const tableBoxRect = tableBoxRef.current?.getBoundingClientRect();
+    const rowEls = Array.from(
+      tableElRef.current?.querySelectorAll('thead tr, tbody tr') ?? []
+    );
+    const rowRects = rowEls.map((el) => el.getBoundingClientRect());
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
-      moveEvent.preventDefault();
-      const deltaY = moveEvent.clientY - startY;
-      const newHeight = Math.max(32, Math.min(400, startHeight + deltaY));
-      setResizingRow({
-        index: ri,
-        startY,
-        startHeight,
-        currentHeight: newHeight,
-      });
+      const dist = Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY);
+      if (!hasDragged && dist > DRAG_THRESHOLD_PX) {
+        hasDragged = true;
+        setActiveMenu(null);
+        document.body.style.cursor = 'grabbing';
+        document.body.style.userSelect = 'none';
+      }
+      if (!hasDragged || rowRects.length === 0) return;
+
+      const gapIdx = findGapIndex(moveEvent.clientY, rowRects, 'y');
+      const fromU = ri + 1;
+      const toU = gapIdx <= fromU ? gapIdx : gapIdx - 1;
+      latestTarget = toU - 1;
+
+      const boundaryY =
+        gapIdx < rowRects.length
+          ? rowRects[gapIdx].top
+          : rowRects[rowRects.length - 1].bottom;
+      const lineTop = boundaryY - (tableBoxRect?.top ?? 0);
+
+      setDragRow({ fromIndex: ri, targetIndex: latestTarget, lineTop });
     };
 
-    const handleMouseUp = (upEvent: MouseEvent) => {
+    const handleMouseUp = () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
+      setDragRow(null);
 
-      const deltaY = upEvent.clientY - startY;
-      const finalHeight = Math.max(32, Math.min(400, startHeight + deltaY));
+      if (hasDragged) {
+        if (latestTarget !== ri) {
+          onChange(reorderRow(getNormalizedContent(), ri, latestTarget));
+        }
+        return;
+      }
 
-      const updatedHeights = rows.map((_, i) =>
-        i === ri ? finalHeight : (content.rowHeights?.[i] ?? 36)
-      );
-
-      setResizingRow(null);
-      onChange({
-        ...content,
-        rowHeights: updatedHeights,
+      blurActiveEditable();
+      window.getSelection()?.removeAllRanges();
+      setSelectedRange({
+        start: { row: ri, col: 0 },
+        end: { row: ri, col: columnsRef.current.length - 1 },
       });
+
+      const currentMenu = activeMenuRef.current;
+      if (currentMenu?.type === 'row' && currentMenu.index === ri) {
+        setActiveMenu(null);
+      } else {
+        const pos = getRelativeAnchor(triggerEl);
+        setActiveMenu({ type: 'row', index: ri, top: pos.top, left: pos.left });
+      }
     };
 
-    document.body.style.cursor = 'row-resize';
-    document.body.style.userSelect = 'none';
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
   };
 
-  const resetRowHeight = (ri: number) => {
-    const updatedHeights = rows.map((_, i) =>
-      i === ri ? 36 : (content.rowHeights?.[i] ?? 36)
-    );
-    onChange({
-      ...content,
-      rowHeights: updatedHeights,
-    });
-  };
-
-  const isCellSelected = (r: number, c: number): boolean => {
-    if (!selectedRange) return false;
-    const minR = Math.min(selectedRange.start.row, selectedRange.end.row);
-    const maxR = Math.max(selectedRange.start.row, selectedRange.end.row);
-    const minC = Math.min(selectedRange.start.col, selectedRange.end.col);
-    const maxC = Math.max(selectedRange.start.col, selectedRange.end.col);
-    return r >= minR && r <= maxR && c >= minC && c <= maxC;
-  };
-
-  const handleCellMouseDown = (e: React.MouseEvent, r: number, c: number) => {
+  // Column pill handle: <=4px click opens menu + selects col; >4px drag reorders columns
+  const handleColHandleMouseDown = (e: React.MouseEvent<HTMLButtonElement>, ci: number) => {
     if (e.button !== 0) return;
-    if ((e.target as HTMLElement).closest('button')) return;
-    if ((e.target as HTMLElement).closest('.cursor-col-resize')) return;
-    if ((e.target as HTMLElement).closest('.cursor-row-resize')) return;
+    e.preventDefault();
+    e.stopPropagation();
 
-    dragStartRef.current = { row: r, col: c };
-    setIsSelecting(true);
+    const triggerEl = e.currentTarget;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    let hasDragged = false;
+    let latestTarget = ci;
 
-    if (e.shiftKey && selectedRange) {
-      setSelectedRange({
-        start: selectedRange.start,
-        end: { row: r, col: c }
-      });
-      return;
-    }
+    const tableBoxRect = tableBoxRef.current?.getBoundingClientRect();
+    const colEls = Array.from(tableElRef.current?.querySelectorAll('thead th') ?? []);
+    const colRects = colEls.map((el) => el.getBoundingClientRect());
 
-    if (!e.shiftKey) {
-      setSelectedRange(null);
-    }
-  };
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const dist = Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY);
+      if (!hasDragged && dist > DRAG_THRESHOLD_PX) {
+        hasDragged = true;
+        setActiveMenu(null);
+        document.body.style.cursor = 'grabbing';
+        document.body.style.userSelect = 'none';
+      }
+      if (!hasDragged || colRects.length === 0) return;
 
-  const handleCellMouseEnter = (r: number, c: number) => {
-    if (!isSelecting || !dragStartRef.current) return;
-    const start = dragStartRef.current;
-    if (start.row !== r || start.col !== c) {
+      const gapIdx = findGapIndex(moveEvent.clientX, colRects, 'x');
+      latestTarget = gapIdx <= ci ? gapIdx : gapIdx - 1;
+
+      const boundaryX =
+        gapIdx < colRects.length
+          ? colRects[gapIdx].left
+          : colRects[colRects.length - 1].right;
+      const lineLeft = boundaryX - (tableBoxRect?.left ?? 0);
+
+      setDragCol({ fromIndex: ci, targetIndex: latestTarget, lineLeft });
+    };
+
+    const handleMouseUp = () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      setDragCol(null);
+
+      if (hasDragged) {
+        if (latestTarget !== ci) {
+          onChange(reorderCol(getNormalizedContent(), ci, latestTarget));
+        }
+        return;
+      }
+
+      blurActiveEditable();
       window.getSelection()?.removeAllRanges();
       setSelectedRange({
-        start,
-        end: { row: r, col: c }
+        start: { row: -1, col: ci },
+        end: { row: rowsRef.current.length - 1, col: ci },
       });
-    }
+
+      const currentMenu = activeMenuRef.current;
+      if (currentMenu?.type === 'col' && currentMenu.index === ci) {
+        setActiveMenu(null);
+      } else {
+        const pos = getRelativeAnchor(triggerEl);
+        setActiveMenu({ type: 'col', index: ci, top: pos.top, left: pos.left });
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
   };
 
-  const selectWholeTable = () => {
-    setSelectedRange({
-      start: { row: -1, col: 0 },
-      end: { row: rows.length - 1, col: columns.length - 1 }
-    });
-  };
-
+  // Global keyboard, mouseup, and outside-click handling for range selection
   useEffect(() => {
     const handleWindowMouseUp = () => {
       setIsSelecting(false);
@@ -369,76 +634,94 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
     };
 
     const handleWindowKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement as HTMLElement | null;
+      const isInsideTable = !!(tableRef.current && activeEl && tableRef.current.contains(activeEl));
+      const isEditingCell = !!(
+        isInsideTable && activeEl?.getAttribute('contenteditable') === 'true'
+      );
+
       if (e.key === 'Escape') {
-        setSelectedRange(null);
+        if (!isEditingCell && !activeMenuRef.current) {
+          setSelectedRange(null);
+        }
         return;
       }
 
-      // Select whole table with Ctrl+A / Cmd+A when inside table
       if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) {
-        const activeEl = document.activeElement;
-        const isEditingCell = activeEl && activeEl.getAttribute('contenteditable') === 'true';
-        const isInsideTable = tableRef.current && tableRef.current.contains(activeEl);
-
         if (selectedRange || isInsideTable) {
           const selection = window.getSelection();
-          // If editing a cell and text is not yet fully selected, let native Ctrl+A select the text first.
-          // If already selected or if user presses it again, select the entire table!
-          if (!isEditingCell || (selection && selection.toString() === activeEl.textContent)) {
+          const cellText = activeEl?.textContent || '';
+          const allCellSelected =
+            !isEditingCell ||
+            cellText === '' ||
+            (selection !== null && selection.toString() === cellText);
+          if (allCellSelected) {
             e.preventDefault();
+            blurActiveEditable();
+            window.getSelection()?.removeAllRanges();
             selectWholeTable();
-            return;
           }
         }
+        return;
       }
 
-      // Copy selected range with Ctrl+C / Cmd+C
+      if (!selectedRange || isEditingCell) return;
+
       if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
-        if (selectedRange) {
-          const minR = Math.min(selectedRange.start.row, selectedRange.end.row);
-          const maxR = Math.max(selectedRange.start.row, selectedRange.end.row);
-          const minC = Math.min(selectedRange.start.col, selectedRange.end.col);
-          const maxC = Math.max(selectedRange.start.col, selectedRange.end.col);
-
-          const tsvLines: string[] = [];
-          for (let r = minR; r <= maxR; r++) {
-            const rowVals: string[] = [];
-            for (let c = minC; c <= maxC; c++) {
-              const val = r === -1 ? (columns[c] || '') : (rows[r]?.[c] || '');
-              rowVals.push(escapeTsvCell(val));
-            }
-            tsvLines.push(rowVals.join('\t'));
-          }
-          const text = tsvLines.join('\n');
-          if (navigator.clipboard?.writeText) {
-            navigator.clipboard.writeText(text);
-          }
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2000);
-        }
+        const tsv = serializeRangeToTsv(columnsRef.current, rowsRef.current, selectedRange);
+        writeClipboardText(tsv);
+        flashCopied();
+        return;
       }
 
-      // Clear selected cells with Backspace or Delete
-      if (e.key === 'Backspace' || e.key === 'Delete') {
-        if (selectedRange) {
-          const activeEl = document.activeElement;
-          const isEditingCell = activeEl && activeEl.getAttribute('contenteditable') === 'true';
-          if (!isEditingCell) {
-            e.preventDefault();
-            const minR = Math.min(selectedRange.start.row, selectedRange.end.row);
-            const maxR = Math.max(selectedRange.start.row, selectedRange.end.row);
-            const minC = Math.min(selectedRange.start.col, selectedRange.end.col);
-            const maxC = Math.max(selectedRange.start.col, selectedRange.end.col);
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'x' || e.key === 'X')) {
+        e.preventDefault();
+        const base = getNormalizedContent();
+        const tsv = serializeRangeToTsv(base.columns, base.rows, selectedRange);
+        writeClipboardText(tsv);
+        flashCopied();
+        onChange(clearRangeCells(base, selectedRange));
+        return;
+      }
 
-            const newRows = rows.map((row, ri) => {
-              if (ri >= minR && ri <= maxR) {
-                return row.map((cell, ci) => (ci >= minC && ci <= maxC ? '' : cell));
-              }
-              return row;
-            });
-            onChange({ ...content, columns, rows: newRows });
-          }
+      if (e.key === 'Backspace' || e.key === 'Delete') {
+        e.preventDefault();
+        onChange(clearRangeCells(getNormalizedContent(), selectedRange));
+        return;
+      }
+
+      // Printable key on a single selected cell focuses it and starts editing
+      const { minR, maxR, minC, maxC } = normalizeRange(selectedRange);
+      const isSingleCell = minR === maxR && minC === maxC;
+      const activeTag = activeEl?.tagName;
+      const isFocusedElsewhere = !!(
+        activeEl &&
+        activeEl !== document.body &&
+        !isInsideTable &&
+        (activeTag === 'INPUT' ||
+          activeTag === 'TEXTAREA' ||
+          activeEl.getAttribute('contenteditable') === 'true')
+      );
+
+      if (
+        isSingleCell &&
+        !activeMenuRef.current &&
+        !isFocusedElsewhere &&
+        e.key.length === 1 &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey
+      ) {
+        e.preventDefault();
+        const cellEl = getCellEditable(minR, minC);
+        if (cellEl) {
+          cellEl.textContent = e.key;
+          cellEl.focus();
+          focusedCellRef.current = { row: minR, col: minC };
+          placeCaret(cellEl, 'end');
         }
+        setSelectedRange(null);
+        updateCellValue(minR, minC, e.key);
       }
     };
 
@@ -451,157 +734,91 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
     window.addEventListener('mouseup', handleWindowMouseUp);
     window.addEventListener('keydown', handleWindowKeyDown);
     document.addEventListener('mousedown', handleClickOutside);
-
     return () => {
       window.removeEventListener('mouseup', handleWindowMouseUp);
       window.removeEventListener('keydown', handleWindowKeyDown);
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [selectedRange, columns, rows, onChange, content]);
+  }, [
+    selectedRange,
+    blurActiveEditable,
+    selectWholeTable,
+    flashCopied,
+    getNormalizedContent,
+    onChange,
+    getCellEditable,
+    updateCellValue,
+  ]);
 
-  useEffect(() => {
-    if (pendingFocusRef.current) {
-      const { row, col } = pendingFocusRef.current;
-      pendingFocusRef.current = null;
-      focusCell(row, col);
-    }
-  }, [rows]);
-
-  const handleEnterOnHeader = (ci: number) => {
-    if (rows.length > 0) {
-      focusCell(0, ci);
-    } else {
-      const newRow = new Array(columns.length).fill('');
-      pendingFocusRef.current = { row: 0, col: ci };
-      onChange({ ...content, columns, rows: [newRow] });
-      if (typeof requestAnimationFrame !== 'undefined') {
-        requestAnimationFrame(() => focusCell(0, ci));
-      } else {
-        setTimeout(() => focusCell(0, ci), 0);
-      }
-    }
-  };
-
-  const handleEnterOnCell = (ri: number, ci: number) => {
-    if (ri < rows.length - 1) {
-      focusCell(ri + 1, ci);
-    } else {
-      const newRow = new Array(columns.length).fill('');
-      const newRowHeights = content.rowHeights ? [...content.rowHeights, 36] : undefined;
-
-      const currentCellEl = tableRef.current?.querySelector(
-        `td[data-row-index="${ri}"][data-col-index="${ci}"] [contenteditable]`
-      ) as HTMLElement | null;
-      const currentText = currentCellEl
-        ? (currentCellEl.innerText !== undefined ? currentCellEl.innerText : (currentCellEl.textContent || ''))
-        : rows[ri][ci];
-
-      const updatedRows = rows.map((r, rIdx) =>
-        rIdx === ri ? r.map((c, cIdx) => (cIdx === ci ? currentText : c)) : r
-      );
-      const newRows = [...updatedRows, newRow];
-
-      pendingFocusRef.current = { row: ri + 1, col: ci };
-      onChange({
-        ...content,
-        columns,
-        rows: newRows,
-        rowHeights: newRowHeights,
-      });
-      if (typeof requestAnimationFrame !== 'undefined') {
-        requestAnimationFrame(() => focusCell(ri + 1, ci));
-      } else {
-        setTimeout(() => focusCell(ri + 1, ci), 0);
-      }
-    }
-  };
-
-  const updateColumnName = (colIndex: number, name: string) => {
-    const newCols = [...columns];
-    newCols[colIndex] = name;
-    onChange({ ...content, columns: newCols, rows });
-  };
-
-  const updateCell = (rowIndex: number, colIndex: number, val: string) => {
-    const newRows = rows.map((r, ri) =>
-      ri === rowIndex ? r.map((c, ci) => (ci === colIndex ? val : c)) : r
-    );
-    onChange({ ...content, columns, rows: newRows });
-  };
-
+  // Outside-edge + actions
   const addColumn = () => {
-    const newCols = [...columns, `Column ${columns.length + 1}`];
-    const newRows = rows.map(r => [...r, '']);
-    const newColWidths = content.columnWidths ? [...content.columnWidths, 150] : undefined;
-    onChange({ ...content, columns: newCols, rows: newRows, columnWidths: newColWidths });
+    const base = getNormalizedContent();
+    const newCols = [...base.columns, ''];
+    const newRows = base.rows.map((r) => [...r, '']);
+    const newColWidths = base.columnWidths
+      ? [...base.columnWidths, DEFAULT_COL_WIDTH]
+      : undefined;
+    pendingFocusRef.current = { row: -1, col: base.columns.length, caret: 'start' };
+    onChange({
+      ...base,
+      columns: newCols,
+      rows: newRows,
+      ...(newColWidths !== undefined ? { columnWidths: newColWidths } : {}),
+    });
   };
 
   const addRow = () => {
-    const newRow = new Array(columns.length).fill('');
-    const newRowHeights = content.rowHeights ? [...content.rowHeights, 36] : undefined;
-    onChange({ ...content, columns, rows: [...rows, newRow], rowHeights: newRowHeights });
+    const base = getNormalizedContent();
+    const newRow = new Array<string>(base.columns.length).fill('');
+    const newRowHeights = base.rowHeights
+      ? [...base.rowHeights, DEFAULT_ROW_HEIGHT]
+      : undefined;
+    pendingFocusRef.current = { row: base.rows.length, col: 0, caret: 'start' };
+    onChange({
+      ...base,
+      rows: [...base.rows, newRow],
+      ...(newRowHeights !== undefined ? { rowHeights: newRowHeights } : {}),
+    });
   };
 
-  const deleteRow = (rowIndex: number) => {
-    if (rows.length <= 1) return;
-    const newRows = rows.filter((_, ri) => ri !== rowIndex);
-    const newRowHeights = content.rowHeights ? content.rowHeights.filter((_, ri) => ri !== rowIndex) : undefined;
-    onChange({ ...content, columns, rows: newRows, rowHeights: newRowHeights });
+  const addRowAndColumn = () => {
+    const base = getNormalizedContent();
+    const newCols = [...base.columns, ''];
+    const newRows = [
+      ...base.rows.map((r) => [...r, '']),
+      new Array<string>(newCols.length).fill(''),
+    ];
+    const newColWidths = base.columnWidths
+      ? [...base.columnWidths, DEFAULT_COL_WIDTH]
+      : undefined;
+    const newRowHeights = base.rowHeights
+      ? [...base.rowHeights, DEFAULT_ROW_HEIGHT]
+      : undefined;
+    pendingFocusRef.current = { row: base.rows.length, col: base.columns.length, caret: 'start' };
+    onChange({
+      ...base,
+      columns: newCols,
+      rows: newRows,
+      ...(newColWidths !== undefined ? { columnWidths: newColWidths } : {}),
+      ...(newRowHeights !== undefined ? { rowHeights: newRowHeights } : {}),
+    });
   };
 
-  const deleteColumn = (colIndex: number) => {
-    if (columns.length <= 1) return;
-    const newCols = columns.filter((_, ci) => ci !== colIndex);
-    const newRows = rows.map(r => r.filter((_, ci) => ci !== colIndex));
-    const newColWidths = content.columnWidths ? content.columnWidths.filter((_, ci) => ci !== colIndex) : undefined;
-    onChange({ ...content, columns: newCols, rows: newRows, columnWidths: newColWidths });
-  };
-
-  const copyTableToClipboard = async () => {
-    const tsv = [
-      columns.map(escapeTsvCell).join('\t'),
-      ...rows.map(r => r.map(escapeTsvCell).join('\t'))
-    ].join('\n');
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(tsv);
-      } else {
-        const textarea = document.createElement('textarea');
-        textarea.value = tsv;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
-      }
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy table: ', err);
-    }
+  // Clipboard Copy / Cut / Paste
+  const copyFullTable = () => {
+    const tsv = serializeRangeToTsv(columns, rows, {
+      start: { row: -1, col: 0 },
+      end: { row: rows.length - 1, col: columns.length - 1 },
+    });
+    writeClipboardText(tsv);
+    flashCopied();
   };
 
   const handleContainerCopy = (e: React.ClipboardEvent<HTMLDivElement>) => {
     if (selectedRange) {
       e.preventDefault();
-      const minR = Math.min(selectedRange.start.row, selectedRange.end.row);
-      const maxR = Math.max(selectedRange.start.row, selectedRange.end.row);
-      const minC = Math.min(selectedRange.start.col, selectedRange.end.col);
-      const maxC = Math.max(selectedRange.start.col, selectedRange.end.col);
-
-      const tsvLines: string[] = [];
-      for (let r = minR; r <= maxR; r++) {
-        const rowVals: string[] = [];
-        for (let c = minC; c <= maxC; c++) {
-          const val = r === -1 ? (columns[c] || '') : (rows[r]?.[c] || '');
-          rowVals.push(escapeTsvCell(val));
-        }
-        tsvLines.push(rowVals.join('\t'));
-      }
-      e.clipboardData.setData('text/plain', tsvLines.join('\n'));
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      e.clipboardData.setData('text/plain', serializeRangeToTsv(columns, rows, selectedRange));
+      flashCopied();
       return;
     }
 
@@ -609,91 +826,99 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
     const isFocusedInCell = !!(
       activeEl &&
       (activeEl.getAttribute('contenteditable') === 'true' ||
-        activeEl.closest('[contenteditable="true"]') !== null ||
-        activeEl.tagName === 'INPUT' ||
-        activeEl.tagName === 'TEXTAREA')
+        activeEl.closest('[contenteditable="true"]') !== null)
     );
-
     const selection = window.getSelection();
 
-    // If focus is inside an active cell or input, do NOT hijack copy unless multiple cells are selected
     if (isFocusedInCell) {
       if (!selection || selection.isCollapsed || !tableRef.current || selection.rangeCount === 0) {
-        // Native copy handles collapsed cursor or single-cell selection
         return;
       }
       const range = selection.getRangeAt(0);
-      const allCells = Array.from(tableRef.current.querySelectorAll('th, td'));
-      const selectedCells = allCells.filter(cell => range.intersectsNode(cell));
+      const selectedCells = Array.from(tableRef.current.querySelectorAll('th, td')).filter((cell) =>
+        range.intersectsNode(cell)
+      );
       if (selectedCells.length <= 1) {
-        // Native copy handles selection inside a single cell
         return;
       }
-      // Spans multiple cells: fall through to format as TSV
-    } else {
-      // Focus is outside editable cells (e.g. table container selected or no active cell focus)
-      if (!selection || selection.isCollapsed) {
-        // Nothing selected, copy whole table as TSV
-        e.preventDefault();
-        const tsv = [
+    } else if (!selection || selection.isCollapsed) {
+      e.preventDefault();
+      e.clipboardData.setData(
+        'text/plain',
+        [
           columns.map(escapeTsvCell).join('\t'),
-          ...rows.map(r => r.map(escapeTsvCell).join('\t'))
-        ].join('\n');
-        e.clipboardData.setData('text/plain', tsv);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-        return;
-      }
+          ...rows.map((r) => r.map(escapeTsvCell).join('\t')),
+        ].join('\n')
+      );
+      flashCopied();
+      return;
     }
 
-    // If selection spans multiple table cells, format them as TSV
     if (tableRef.current && selection && selection.rangeCount > 0) {
       const range = selection.getRangeAt(0);
       const allCells = Array.from(tableRef.current.querySelectorAll('th, td'));
-      const selectedCells = allCells.filter(cell => range.intersectsNode(cell));
+      const selectedCells = allCells.filter((cell) => range.intersectsNode(cell));
       if (selectedCells.length > 1) {
         e.preventDefault();
-        const trElements = Array.from(tableRef.current.querySelectorAll('tbody tr'));
         const tsvRows: string[] = [];
-
-        // Check if headers are included
-        const thElements = Array.from(tableRef.current.querySelectorAll('thead th.table-header-cell'));
-        const selectedHeaders = thElements.filter(th => range.intersectsNode(th));
+        const selectedHeaders = Array.from(
+          tableRef.current.querySelectorAll('thead th.table-header-cell')
+        ).filter((th) => range.intersectsNode(th));
         if (selectedHeaders.length > 0) {
-          const headerVals = selectedHeaders.map(th => {
-            const editable = th.querySelector<HTMLElement>('[contenteditable]');
-            const thEl = th as HTMLElement;
-            const raw = editable ? (editable.innerText !== undefined ? editable.innerText : (editable.textContent || '')) : (thEl.innerText !== undefined ? thEl.innerText : (thEl.textContent || ''));
-            return escapeTsvCell(raw);
-          });
-          tsvRows.push(headerVals.join('\t'));
+          tsvRows.push(
+            selectedHeaders
+              .map((th) => {
+                const editable = th.querySelector<HTMLElement>('[contenteditable]');
+                return escapeTsvCell(readEditableText(editable ?? (th as HTMLElement)));
+              })
+              .join('\t')
+          );
         }
 
-        for (const tr of trElements) {
-          const rowTd = Array.from(tr.querySelectorAll('td.table-data-cell'));
-          const selectedRowTd = rowTd.filter(td => range.intersectsNode(td));
+        for (const tr of Array.from(tableRef.current.querySelectorAll('tbody tr'))) {
+          const selectedRowTd = Array.from(tr.querySelectorAll('td.table-data-cell')).filter(
+            (td) => range.intersectsNode(td)
+          );
           if (selectedRowTd.length > 0) {
-            const vals = selectedRowTd.map(td => {
-              const editable = td.querySelector<HTMLElement>('[contenteditable]');
-              const tdEl = td as HTMLElement;
-              const raw = editable ? (editable.innerText !== undefined ? editable.innerText : (editable.textContent || '')) : (tdEl.innerText !== undefined ? tdEl.innerText : (tdEl.textContent || ''));
-              return escapeTsvCell(raw);
-            });
-            tsvRows.push(vals.join('\t'));
+            tsvRows.push(
+              selectedRowTd
+                .map((td) => {
+                  const editable = td.querySelector<HTMLElement>('[contenteditable]');
+                  return escapeTsvCell(readEditableText(editable ?? (td as HTMLElement)));
+                })
+                .join('\t')
+            );
           }
         }
 
-        const resultTsv = tsvRows.length > 0
-          ? tsvRows.join('\n')
-          : [
-              columns.map(escapeTsvCell).join('\t'),
-              ...rows.map(r => r.map(escapeTsvCell).join('\t'))
-            ].join('\n');
+        const resultTsv =
+          tsvRows.length > 0
+            ? tsvRows.join('\n')
+            : [
+                columns.map(escapeTsvCell).join('\t'),
+                ...rows.map((r) => r.map(escapeTsvCell).join('\t')),
+              ].join('\n');
         e.clipboardData.setData('text/plain', resultTsv);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        flashCopied();
       }
     }
+  };
+
+  const handleContainerCut = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    if (!selectedRange) return;
+    const activeEl = document.activeElement;
+    const isEditingCell = !!(
+      activeEl &&
+      tableRef.current?.contains(activeEl) &&
+      activeEl.getAttribute('contenteditable') === 'true'
+    );
+    if (isEditingCell) return;
+
+    e.preventDefault();
+    const base = getNormalizedContent();
+    e.clipboardData.setData('text/plain', serializeRangeToTsv(base.columns, base.rows, selectedRange));
+    flashCopied();
+    onChange(clearRangeCells(base, selectedRange));
   };
 
   const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
@@ -704,24 +929,35 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
     const activeEl = document.activeElement;
     const targetEl = e.target as HTMLElement | null;
     const isCellFocused = !!(
-      (activeEl && (activeEl.getAttribute('contenteditable') === 'true' || activeEl.closest('[contenteditable="true"]'))) ||
-      (targetEl && (targetEl.getAttribute('contenteditable') === 'true' || targetEl.closest('[contenteditable="true"]')))
+      (activeEl &&
+        (activeEl.getAttribute('contenteditable') === 'true' ||
+          activeEl.closest('[contenteditable="true"]'))) ||
+      (targetEl &&
+        (targetEl.getAttribute('contenteditable') === 'true' ||
+          targetEl.closest('[contenteditable="true"]')))
     );
     const isHtmlTable = !!(html && (html.includes('<table') || html.includes('<tr')));
 
     if (isCellFocused && !text.includes('\t') && !isHtmlTable) {
-      // Allow native multiline paste directly into the focused cell without whole-table replacement
       return;
     }
 
     const targetTd = targetEl?.closest ? targetEl.closest('td') : null;
     const targetTh = targetEl?.closest ? targetEl.closest('th') : null;
+    const rangeStart = selectedRange ? normalizeRange(selectedRange) : null;
 
-    const startRow = targetTd ? Number(targetTd.getAttribute('data-row-index') ?? 0) : -1;
+    const startRow = targetTd
+      ? Number(targetTd.getAttribute('data-row-index') ?? 0)
+      : targetTh
+        ? -1
+        : (rangeStart?.minR ?? -1);
     const startCol = targetTd
       ? Number(targetTd.getAttribute('data-col-index') ?? 0)
-      : (targetTh ? Number(targetTh.getAttribute('data-col-index') ?? 0) : 0);
+      : targetTh
+        ? Number(targetTh.getAttribute('data-col-index') ?? 0)
+        : (rangeStart?.minC ?? 0);
 
+    const base = getNormalizedContent();
     const tableData = parseClipboardTableData(text, html);
     if (tableData && tableData.rawGrid.length > 0) {
       e.preventDefault();
@@ -730,11 +966,10 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
       const pasteColCount = pasteGrid[0].length;
 
       if (startRow === -1) {
-        // Pasted into header
-        const reqCols = Math.max(columns.length, startCol + pasteColCount);
-        const reqRows = Math.max(rows.length, pasteRowCount - 1);
+        const reqCols = Math.max(base.columns.length, startCol + pasteColCount);
+        const reqRows = Math.max(base.rows.length, pasteRowCount - 1);
 
-        const newCols = [...columns];
+        const newCols = [...base.columns];
         while (newCols.length < reqCols) {
           newCols.push(`Column ${newCols.length + 1}`);
         }
@@ -742,13 +977,13 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
           newCols[startCol + c] = pasteGrid[0][c] || newCols[startCol + c];
         }
 
-        const newRows = rows.map(r => {
+        const newRows = base.rows.map((r) => {
           const rowCopy = [...r];
           while (rowCopy.length < reqCols) rowCopy.push('');
           return rowCopy;
         });
         while (newRows.length < reqRows) {
-          newRows.push(new Array(reqCols).fill(''));
+          newRows.push(new Array<string>(reqCols).fill(''));
         }
 
         for (let r = 1; r < pasteRowCount; r++) {
@@ -757,27 +992,26 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
           }
         }
 
-        onChange({ ...content, columns: newCols, rows: newRows });
+        onChange({ ...base, columns: newCols, rows: newRows });
       } else {
-        // Pasted into regular body cell
         const actualStartRow = Math.max(0, startRow);
         const actualStartCol = Math.max(0, startCol);
 
-        const reqCols = Math.max(columns.length, actualStartCol + pasteColCount);
-        const reqRows = Math.max(rows.length, actualStartRow + pasteRowCount);
+        const reqCols = Math.max(base.columns.length, actualStartCol + pasteColCount);
+        const reqRows = Math.max(base.rows.length, actualStartRow + pasteRowCount);
 
-        const newCols = [...columns];
+        const newCols = [...base.columns];
         while (newCols.length < reqCols) {
           newCols.push(`Column ${newCols.length + 1}`);
         }
 
-        const newRows = rows.map(r => {
+        const newRows = base.rows.map((r) => {
           const rowCopy = [...r];
           while (rowCopy.length < reqCols) rowCopy.push('');
           return rowCopy;
         });
         while (newRows.length < reqRows) {
-          newRows.push(new Array(reqCols).fill(''));
+          newRows.push(new Array<string>(reqCols).fill(''));
         }
 
         for (let r = 0; r < pasteRowCount; r++) {
@@ -786,300 +1020,457 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
           }
         }
 
-        onChange({ ...content, columns: newCols, rows: newRows });
+        onChange({ ...base, columns: newCols, rows: newRows });
       }
 
-      setPasted(true);
-      setTimeout(() => setPasted(false), 2000);
+      flashPasted();
       return;
     }
 
-    // Split lines, ignoring trailing empty newline
     const rawLines = text.split(/\r?\n/).filter((line, idx, arr) => {
       if (idx === arr.length - 1 && line.trim() === '') return false;
       return true;
     });
 
-    // 1. Single-line text should NEVER trigger whole-table replacement; pass through to native cell paste
-    if (rawLines.length <= 1) {
-      return;
-    }
+    if (rawLines.length <= 1) return;
 
-    const hasTabs = rawLines.some(l => l.includes('\t'));
-    const hasCommas = rawLines.some(l => l.includes(','));
+    const hasTabs = rawLines.some((l) => l.includes('\t'));
+    const hasCommas = rawLines.some((l) => l.includes(','));
 
-    let parsedRows: string[][] = [];
+    let parsedRows: string[][];
     if (hasTabs) {
-      parsedRows = rawLines.map(l => l.split('\t'));
+      parsedRows = rawLines.map((l) => l.split('\t'));
     } else if (hasCommas) {
-      // 2. Comma-separated CSV parsing only if multiple lines (rawLines.length >= 2) with consistent columns (>= 2 columns)
-      const csvRows = rawLines.map(l => parseCsvLine(l));
+      const csvRows = rawLines.map((l) => parseCsvLine(l));
       const firstColCount = csvRows[0].length;
-      if (firstColCount >= 2 && csvRows.every(r => r.length === firstColCount)) {
+      if (firstColCount >= 2 && csvRows.every((r) => r.length === firstColCount)) {
         parsedRows = csvRows;
       } else {
-        // Inconsistent columns with commas, treat each line as a single row
-        parsedRows = rawLines.map(l => [l]);
+        parsedRows = rawLines.map((l) => [l]);
       }
     } else {
-      // Multiple lines without tabs or commas: treat each line as a row
-      parsedRows = rawLines.map(l => [l]);
+      parsedRows = rawLines.map((l) => [l]);
     }
 
-    const maxCols = parsedRows.length > 0 ? Math.max(...parsedRows.map(r => r.length)) : 0;
-    const numRows = parsedRows.length;
-
-    // If there are >= 2 rows, parse as table replacement
-    if (numRows >= 2) {
+    const maxCols = parsedRows.length > 0 ? Math.max(...parsedRows.map((r) => r.length)) : 0;
+    if (parsedRows.length >= 2) {
       e.preventDefault();
-
-      // Pad rows so all rows have maxCols
-      const normalizedRows = parsedRows.map(r => {
+      const normalizedRows = parsedRows.map((r) => {
         const row = [...r];
         while (row.length < maxCols) row.push('');
         return row;
       });
-
       const newColumns = normalizedRows[0].map((c, i) => c.trim() || `Column ${i + 1}`);
       const newRows = normalizedRows.slice(1);
-
-      onChange({ ...content, columns: newColumns, rows: newRows });
-      setPasted(true);
-      setTimeout(() => setPasted(false), 2000);
+      onChange({ ...base, columns: newColumns, rows: newRows });
+      flashPasted();
     }
   };
+
+  const renderRowPillHandle = (rowIndex: number) => {
+    const isVisible =
+      hoveredRow === rowIndex ||
+      (activeMenu?.type === 'row' && activeMenu.index === rowIndex) ||
+      dragRow?.fromIndex === rowIndex;
+    return (
+      <button
+        type="button"
+        aria-label={`Row ${rowIndex + 2} options`}
+        title="Click for row options or drag to reorder"
+        onMouseDown={(e) => handleRowHandleMouseDown(e, rowIndex)}
+        onMouseEnter={() => setHoveredRow(rowIndex)}
+        className={`absolute -left-3.5 top-1/2 -translate-y-1/2 z-30 flex items-center justify-center w-3.5 h-5 rounded border border-stone-300/80 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700 shadow-xs cursor-grab active:cursor-grabbing transition-opacity ${
+          isVisible ? 'opacity-100' : 'opacity-0 hover:opacity-100 focus-visible:opacity-100'
+        }`}
+      >
+        <GripVertical className="w-3 h-3" />
+      </button>
+    );
+  };
+
+  const renderColPillHandle = (colIndex: number) => {
+    const isVisible =
+      hoveredCol === colIndex ||
+      (activeMenu?.type === 'col' && activeMenu.index === colIndex) ||
+      dragCol?.fromIndex === colIndex;
+    return (
+      <button
+        type="button"
+        aria-label={`Column ${colIndex + 1} options`}
+        title="Click for column options or drag to reorder"
+        onMouseDown={(e) => handleColHandleMouseDown(e, colIndex)}
+        onMouseEnter={() => setHoveredCol(colIndex)}
+        className={`absolute -top-3.5 left-1/2 -translate-x-1/2 z-30 flex items-center justify-center h-3.5 w-6 rounded border border-stone-300/80 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700 shadow-xs cursor-grab active:cursor-grabbing transition-opacity ${
+          isVisible ? 'opacity-100' : 'opacity-0 hover:opacity-100 focus-visible:opacity-100'
+        }`}
+      >
+        <MoreHorizontal className="w-3 h-3" />
+      </button>
+    );
+  };
+
+  const totalRows = 1 + rows.length;
+  const headerCellFill = 'bg-stone-100/70 dark:bg-white/[0.04]';
+  const selectedCellFill = 'bg-[#2383E2]/10 dark:bg-[#2383E2]/20';
+  const gridBorderClass = 'border border-stone-200/90 dark:border-stone-700/70';
 
   return (
     <div
       ref={tableRef}
       onPaste={handlePaste}
       onCopy={handleContainerCopy}
-      className="w-full my-2.5 group/table select-text"
+      onCut={handleContainerCut}
+      className="relative w-full my-2 group/table select-none"
     >
-      <div className="w-full overflow-x-auto custom-scrollbar rounded-xl border border-stone-200/80 dark:border-stone-800/80 bg-white/40 dark:bg-stone-900/30 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-        <table
-          className="border-collapse text-sm select-text table-fixed"
-          style={{
-            width: `${activeColWidths.reduce((a, b) => a + b, 0) + 40}px`,
-          }}
+      {/* Floating top-right Options bar pinned outside horizontal scroll */}
+      <div
+        className={`absolute right-0 -top-7 z-30 flex items-center gap-1.5 transition-opacity duration-150 ${
+          activeMenu?.type === 'options'
+            ? 'opacity-100'
+            : 'opacity-0 group-hover/table:opacity-100 focus-within:opacity-100'
+        }`}
+      >
+        <button
+          type="button"
+          aria-label="Options"
+          aria-haspopup="menu"
+          aria-expanded={activeMenu?.type === 'options'}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={() =>
+            setActiveMenu((prev) =>
+              prev?.type === 'options' ? null : { type: 'options' }
+            )
+          }
+          className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
         >
-          <colgroup>
-            {columns.map((_, ci) => (
-              <col key={ci} style={{ width: `${activeColWidths[ci]}px` }} />
-            ))}
-            <col style={{ width: '40px' }} />
-          </colgroup>
-          <thead>
-            <tr className="border-b border-stone-200/80 dark:border-stone-800 bg-stone-50/70 dark:bg-stone-900/40">
-              {columns.map((col, ci) => {
-                const isSelected = isCellSelected(-1, ci);
-                const isResizingThis = resizingCol?.index === ci;
-                return (
-                  <th
-                    key={ci}
-                    data-col-index={ci}
-                    style={{ width: `${activeColWidths[ci]}px` }}
-                    onMouseDown={(e) => handleCellMouseDown(e, -1, ci)}
-                    onMouseEnter={() => handleCellMouseEnter(-1, ci)}
-                    className={`table-header-cell p-1.5 text-left font-semibold text-xs text-stone-600 dark:text-stone-300 border-r border-stone-200/60 dark:border-stone-800/60 last:border-r-0 relative group/th select-none transition-colors ${
-                      isSelected
-                        ? 'bg-blue-500/15 dark:bg-blue-400/20 ring-1 ring-blue-500/40 dark:ring-blue-400/40 ring-inset'
-                        : ''
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-1.5 pr-1.5">
-                      <div className="flex items-center gap-1 flex-1 min-w-0">
-                        {ci === 0 && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              selectWholeTable();
-                            }}
-                            title="Select whole table"
-                            aria-label="Select whole table"
-                            className="opacity-0 group-hover/table:opacity-100 group-hover/th:opacity-100 p-0.5 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 rounded hover:bg-stone-500/10 dark:hover:bg-white/10 transition leading-none shrink-0"
-                          >
-                            <Table className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        <EditableCell
-                          value={col}
-                          placeholder="Column name"
-                          isHeader
-                          onChange={(val) => updateColumnName(ci, val)}
-                          onEnterDown={() => handleEnterOnHeader(ci)}
-                          className="w-full font-semibold outline-none text-stone-700 dark:text-stone-200 text-xs px-1.5 py-0.5 rounded hover:bg-stone-500/10 dark:hover:bg-white/10 focus:bg-white/80 dark:focus:bg-stone-800/80 focus:ring-1 focus:ring-stone-400 dark:focus:ring-stone-600 transition-colors select-text cursor-text empty:before:content-[attr(data-placeholder)] empty:before:text-stone-400 dark:empty:before:text-stone-500 empty:before:pointer-events-none empty:before:select-none truncate"
-                        />
-                      </div>
-                      {columns.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => deleteColumn(ci)}
-                          title="Delete column"
-                          aria-label={`Delete column ${col || ci + 1}`}
-                          className="opacity-0 group-hover/th:opacity-100 text-stone-400 hover:text-red-500 dark:hover:text-red-400 p-0.5 rounded hover:bg-stone-500/10 dark:hover:bg-white/10 text-xs transition leading-none shrink-0"
-                        >
-                          ×
-                        </button>
-                      )}
-                    </div>
+          <SlidersHorizontal className="w-3 h-3" />
+          <span>Options</span>
+        </button>
 
-                    {/* Column resize handle */}
-                    <div
-                      onMouseDown={(e) => handleColResizeStart(e, ci)}
-                      onDoubleClick={() => resetColWidth(ci)}
-                      title="Drag to resize column (Double-click to reset)"
-                      aria-label={`Resize column ${col || ci + 1}`}
-                      className={`absolute top-0 right-0 bottom-0 w-2 cursor-col-resize flex items-center justify-center group/resize z-20 transition-colors ${
-                        isResizingThis ? 'bg-amber-500/25 dark:bg-amber-400/25' : 'hover:bg-amber-500/20 dark:hover:bg-amber-400/20'
-                      }`}
-                    >
-                      <div
-                        className={`w-[2px] transition-all rounded-full ${
-                          isResizingThis
-                            ? 'h-full bg-amber-500 dark:bg-amber-400'
-                            : 'h-3.5 bg-stone-300/80 dark:bg-stone-700/80 group-hover/resize:bg-amber-500 dark:group-hover/resize:bg-amber-400'
-                        }`}
-                      />
-                    </div>
-                  </th>
-                );
-              })}
-              <th className="w-10 p-1 border-stone-200/80 dark:border-stone-800 text-center">
-                <button
-                  type="button"
-                  onClick={addColumn}
-                  title="Add column"
-                  aria-label="Add column"
-                  className="p-1 rounded text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-500/10 dark:hover:bg-white/10 transition"
-                >
-                  <Plus className="w-3.5 h-3.5 mx-auto" />
-                </button>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, ri) => {
-              const rowH = activeRowHeights[ri];
-              const isResizingThisRow = resizingRow?.index === ri;
-              return (
-                <tr
-                  key={ri}
-                  style={{ minHeight: `${rowH}px`, height: 'auto' }}
-                  className="border-b border-stone-200/50 dark:border-stone-800/50 last:border-b-0 hover:bg-stone-500/5 dark:hover:bg-white/5 transition-colors group/tr relative"
-                >
-                  {row.map((cell, ci) => {
-                    const isSelected = isCellSelected(ri, ci);
-                    return (
-                      <td
-                        key={ci}
-                        data-row-index={ri}
-                        data-col-index={ci}
-                        style={{ width: `${activeColWidths[ci]}px`, minHeight: `${rowH}px`, height: 'auto' }}
-                        onMouseDown={(e) => handleCellMouseDown(e, ri, ci)}
-                        onMouseEnter={() => handleCellMouseEnter(ri, ci)}
-                        className={`table-data-cell p-0 border-r border-stone-200/50 dark:border-stone-800/50 last:border-r-0 align-top transition-colors relative group/td ${
-                          isSelected
-                            ? 'bg-blue-500/15 dark:bg-blue-400/20 ring-1 ring-blue-500/40 dark:ring-blue-400/40 ring-inset'
-                            : ''
-                        }`}
-                      >
-                        <EditableCell
-                          value={cell}
-                          placeholder="Empty"
-                          onChange={(val) => updateCell(ri, ci, val)}
-                          onEnterDown={() => handleEnterOnCell(ri, ci)}
-                          className="w-full px-2.5 py-1.5 text-sm text-stone-800 dark:text-stone-100 outline-none focus:bg-white/80 dark:focus:bg-stone-800/80 focus:ring-1 focus:ring-stone-400 dark:focus:ring-stone-600 transition-colors select-text cursor-text empty:before:content-[attr(data-placeholder)] empty:before:text-stone-400 dark:empty:before:text-stone-600 empty:before:pointer-events-none empty:before:select-none whitespace-pre-wrap break-words min-h-[1.75rem]"
-                        />
-
-                        {/* Row resize handle at bottom of cell */}
-                        <div
-                          onMouseDown={(e) => handleRowResizeStart(e, ri)}
-                          onDoubleClick={() => resetRowHeight(ri)}
-                          title="Drag to resize row (Double-click to reset)"
-                          aria-label={`Resize row ${ri + 1}`}
-                          className={`absolute bottom-0 left-0 right-0 h-1.5 cursor-row-resize z-10 group/row-resize transition-colors ${
-                            isResizingThisRow ? 'bg-amber-500/25 dark:bg-amber-400/25' : 'hover:bg-amber-500/20 dark:hover:bg-amber-400/20'
-                          }`}
-                        >
-                          <div
-                            className={`h-[1.5px] w-full transition-colors ${
-                              isResizingThisRow
-                                ? 'bg-amber-500 dark:bg-amber-400'
-                                : 'bg-transparent group-hover/row-resize:bg-amber-500/70 dark:group-hover/row-resize:bg-amber-400/70'
-                            }`}
-                          />
-                        </div>
-                      </td>
-                    );
-                  })}
-                  <td
-                    style={{ minHeight: `${rowH}px`, height: 'auto' }}
-                    className="w-10 p-1 text-center align-middle relative"
-                  >
-                    {rows.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => deleteRow(ri)}
-                        title="Delete row"
-                        aria-label={`Delete row ${ri + 1}`}
-                        className="opacity-0 group-hover/tr:opacity-100 p-1 rounded text-stone-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-stone-500/10 dark:hover:bg-white/10 transition"
-                      >
-                        <Trash2 className="w-3.5 h-3.5 mx-auto" />
-                      </button>
-                    )}
-                    <div
-                      onMouseDown={(e) => handleRowResizeStart(e, ri)}
-                      onDoubleClick={() => resetRowHeight(ri)}
-                      title="Drag to resize row (Double-click to reset)"
-                      aria-label={`Resize row ${ri + 1}`}
-                      className={`absolute bottom-0 left-0 right-0 h-1.5 cursor-row-resize z-10 transition-colors ${
-                        isResizingThisRow ? 'bg-amber-500/25 dark:bg-amber-400/25' : 'hover:bg-amber-500/20 dark:hover:bg-amber-400/20'
-                      }`}
-                    />
-                  </td>
-                </tr>
-              );
-            })}
-            {/* Notion style inline + New row */}
-            <tr
-              onClick={addRow}
-              className="border-t border-stone-200/50 dark:border-stone-800/50 hover:bg-stone-500/5 dark:hover:bg-white/5 transition-colors cursor-pointer group/new-row"
-            >
-              <td
-                colSpan={columns.length + 1}
-                className="p-0 select-none cursor-pointer"
-              >
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    addRow();
-                  }}
-                  aria-label="Add row"
-                  className="w-full text-left px-3 py-2 text-xs text-stone-400 hover:text-stone-700 dark:text-stone-500 dark:hover:text-stone-200 flex items-center gap-1.5 font-medium transition-colors cursor-pointer bg-transparent border-none"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>New</span>
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        {activeMenu?.type === 'options' && (
+          <div className="absolute right-0 top-full mt-1 z-50">
+            <TableOptionsMenu
+              hasHeaderRow={hasHeaderRow}
+              hasHeaderColumn={hasHeaderColumn}
+              fitToWidth={fitToWidth}
+              onToggleHeaderRow={() =>
+                onChange({ ...getNormalizedContent(), hasHeaderRow: !hasHeaderRow })
+              }
+              onToggleHeaderColumn={() =>
+                onChange({ ...getNormalizedContent(), hasHeaderColumn: !hasHeaderColumn })
+              }
+              onToggleFitToWidth={() =>
+                onChange({ ...getNormalizedContent(), fitToWidth: !fitToWidth })
+              }
+              onCopyTable={copyFullTable}
+              onClearTable={() => {
+                const base = getNormalizedContent();
+                onChange({
+                  ...base,
+                  columns: base.columns.map(() => ''),
+                  rows: base.rows.map((r) => r.map(() => '')),
+                });
+              }}
+              onClose={() => setActiveMenu(null)}
+            />
+          </div>
+        )}
       </div>
 
-      {/* Screen-reader / test accessible button */}
-      <button
-        type="button"
-        onClick={copyTableToClipboard}
-        aria-label="Copy table"
-        className="sr-only"
-      >
-        Copy table
-      </button>
+      {/* Horizontal scroll container */}
+      <div className="w-full overflow-x-auto custom-scrollbar">
+        <div
+          onMouseLeave={() => {
+            setHoveredRow(null);
+            setHoveredCol(null);
+          }}
+          className={`relative inline-block pt-4 pl-4 pr-6 pb-6 ${
+            fitToWidth ? 'min-w-full' : ''
+          }`}
+        >
+          {/* Row 1: Table box + Right outside-edge + bar */}
+          <div className="flex items-stretch">
+            <div ref={tableBoxRef} className={`relative ${fitToWidth ? 'flex-1' : ''}`}>
+              <table
+                ref={tableElRef}
+                className="border-collapse table-fixed text-sm"
+                style={
+                  fitToWidth
+                    ? { width: '100%', minWidth: `${totalColWidth}px` }
+                    : { width: `${totalColWidth}px` }
+                }
+              >
+                <colgroup>
+                  {columns.map((_, ci) => (
+                    <col key={ci} style={{ width: `${activeColWidths[ci]}px` }} />
+                  ))}
+                </colgroup>
+                <thead>
+                  <tr style={{ minHeight: `${DEFAULT_ROW_HEIGHT}px`, height: 'auto' }}>
+                    {columns.map((col, ci) => {
+                      const isHeaderStyled = hasHeaderRow || (hasHeaderColumn && ci === 0);
+                      const isSelected = isCellInRange(-1, ci, selectedRange);
+                      const boxShadow = computeSelectionBoxShadow(-1, ci, selectedRange);
 
-      {/* Subtle feedback indicator */}
+                      return (
+                        <th
+                          key={ci}
+                          ref={(el) => {
+                            thRefs.current[ci] = el;
+                          }}
+                          data-row-index={-1}
+                          data-col-index={ci}
+                          style={{
+                            width: `${activeColWidths[ci]}px`,
+                            minHeight: `${DEFAULT_ROW_HEIGHT}px`,
+                            height: 'auto',
+                            ...(boxShadow ? { boxShadow } : {}),
+                          }}
+                          onMouseDown={(e) => handleCellMouseDown(e, -1, ci)}
+                          onMouseEnter={() => handleCellMouseEnter(-1, ci)}
+                          className={`table-header-cell p-0 align-top text-left relative ${gridBorderClass} transition-colors ${
+                            isSelected
+                              ? selectedCellFill
+                              : isHeaderStyled
+                                ? headerCellFill
+                                : ''
+                          }`}
+                        >
+                          {ci === 0 && renderRowPillHandle(-1)}
+                          {renderColPillHandle(ci)}
+
+                          <TableCell
+                            value={col}
+                            rowIndex={-1}
+                            colIndex={ci}
+                            isHeaderCell={isHeaderStyled}
+                            onChange={(val) => updateCellValue(-1, ci, val)}
+                            onNavigate={handleCellNavigate}
+                            onEscapeToSelect={handleEscapeToSelect}
+                            onFocusCell={(r, c) => {
+                              focusedCellRef.current = { row: r, col: c };
+                            }}
+                            className="px-2.5 py-1.5 min-h-[1.75rem] leading-[1.45]"
+                          />
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row, ri) => {
+                    const rowH = content.rowHeights?.[ri] ?? DEFAULT_ROW_HEIGHT;
+                    return (
+                      <tr
+                        key={ri}
+                        style={{ minHeight: `${rowH}px`, height: 'auto' }}
+                      >
+                        {row.map((cell, ci) => {
+                          const isHeaderStyled = hasHeaderColumn && ci === 0;
+                          const isSelected = isCellInRange(ri, ci, selectedRange);
+                          const boxShadow = computeSelectionBoxShadow(ri, ci, selectedRange);
+
+                          return (
+                            <td
+                              key={ci}
+                              data-row-index={ri}
+                              data-col-index={ci}
+                              style={{
+                                width: `${activeColWidths[ci]}px`,
+                                minHeight: `${rowH}px`,
+                                height: 'auto',
+                                ...(boxShadow ? { boxShadow } : {}),
+                              }}
+                              onMouseDown={(e) => handleCellMouseDown(e, ri, ci)}
+                              onMouseEnter={() => handleCellMouseEnter(ri, ci)}
+                              className={`table-data-cell p-0 align-top relative ${gridBorderClass} transition-colors ${
+                                isSelected
+                                  ? selectedCellFill
+                                  : isHeaderStyled
+                                    ? headerCellFill
+                                    : ''
+                              }`}
+                            >
+                              {ci === 0 && renderRowPillHandle(ri)}
+
+                              <TableCell
+                                value={cell}
+                                rowIndex={ri}
+                                colIndex={ci}
+                                isHeaderCell={isHeaderStyled}
+                                onChange={(val) => updateCellValue(ri, ci, val)}
+                                onNavigate={handleCellNavigate}
+                                onEscapeToSelect={handleEscapeToSelect}
+                                onFocusCell={(r, c) => {
+                                  focusedCellRef.current = { row: r, col: c };
+                                }}
+                                className={`px-2.5 py-1.5 min-h-[1.75rem] text-sm leading-[1.45] ${
+                                  isHeaderStyled
+                                    ? 'font-medium text-stone-800 dark:text-stone-100'
+                                    : 'font-normal text-stone-800 dark:text-stone-100'
+                                }`}
+                              />
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              {/* Full-height blue hover column resize dividers */}
+              {columns.map((col, ci) => {
+                const edgePx =
+                  fitToWidth && measuredColEdges[ci]
+                    ? measuredColEdges[ci]
+                    : cumulativeColEdges[ci];
+                const isResizingThis = resizingCol?.index === ci;
+                return (
+                  <div
+                    key={`col-resize-${ci}`}
+                    aria-label={`Resize column ${col || ci + 1}`}
+                    title="Drag to resize column (Double-click to reset)"
+                    onMouseDown={(e) => handleColResizeStart(e, ci)}
+                    onDoubleClick={() => resetColWidth(ci)}
+                    style={{ left: `${edgePx - 3}px` }}
+                    className="absolute top-0 bottom-0 w-1.5 cursor-col-resize z-20 group/col-resize flex justify-center"
+                  >
+                    <div
+                      className={`w-[2px] h-full transition-colors ${
+                        isResizingThis
+                          ? 'bg-[#2383E2]'
+                          : 'bg-transparent group-hover/col-resize:bg-[#2383E2]'
+                      }`}
+                    />
+                  </div>
+                );
+              })}
+
+              {/* Drag reorder drop indicator lines */}
+              {dragRow && (
+                <div
+                  aria-hidden="true"
+                  style={{ top: `${dragRow.lineTop}px` }}
+                  className="pointer-events-none absolute left-0 right-0 h-[2px] bg-[#2383E2] z-30"
+                />
+              )}
+              {dragCol && (
+                <div
+                  aria-hidden="true"
+                  style={{ left: `${dragCol.lineLeft}px` }}
+                  className="pointer-events-none absolute top-0 bottom-0 w-[2px] bg-[#2383E2] z-30"
+                />
+              )}
+            </div>
+
+            {/* Right outside-edge + bar (Add column) */}
+            <button
+              type="button"
+              onClick={addColumn}
+              aria-label="Add column"
+              title="Add column"
+              className="w-4 ml-1 shrink-0 rounded-sm bg-stone-200/70 dark:bg-stone-800/80 hover:bg-stone-300/80 dark:hover:bg-stone-700 text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-100 flex items-center justify-center opacity-0 group-hover/table:opacity-50 hover:!opacity-100 focus-visible:opacity-100 transition-opacity"
+            >
+              <Plus className="w-3 h-3" />
+            </button>
+          </div>
+
+          {/* Row 2: Bottom outside-edge + bar (Add row) + Corner + (Add row & column) */}
+          <div className="flex items-center mt-1">
+            <button
+              type="button"
+              onClick={addRow}
+              aria-label="Add row"
+              title="Add row"
+              className="h-4 flex-1 min-w-0 rounded-sm bg-stone-200/70 dark:bg-stone-800/80 hover:bg-stone-300/80 dark:hover:bg-stone-700 text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-100 flex items-center justify-center opacity-0 group-hover/table:opacity-50 hover:!opacity-100 focus-visible:opacity-100 transition-opacity"
+            >
+              <Plus className="w-3 h-3" />
+            </button>
+            <button
+              type="button"
+              onClick={addRowAndColumn}
+              aria-label="Add row and column"
+              title="Add row and column"
+              className="w-4 h-4 ml-1 shrink-0 rounded-sm bg-stone-200/70 dark:bg-stone-800/80 hover:bg-stone-300/80 dark:hover:bg-stone-700 text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-100 flex items-center justify-center opacity-0 group-hover/table:opacity-50 hover:!opacity-100 focus-visible:opacity-100 transition-opacity"
+            >
+              <Plus className="w-3 h-3" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Row & Column contextual menus rendered outside overflow-x-auto to avoid clipping */}
+      {activeMenu?.type === 'row' && (
+        <div
+          className="absolute z-50"
+          style={{ top: `${activeMenu.top}px`, left: `${activeMenu.left}px` }}
+        >
+          <RowActionMenu
+            rowIndex={activeMenu.index}
+            canDelete={totalRows > 1}
+            onInsertAbove={() =>
+              onChange(insertRowAt(getNormalizedContent(), activeMenu.index, 'above'))
+            }
+            onInsertBelow={() =>
+              onChange(insertRowAt(getNormalizedContent(), activeMenu.index, 'below'))
+            }
+            onDuplicate={() =>
+              onChange(duplicateRowAt(getNormalizedContent(), activeMenu.index))
+            }
+            onClear={() =>
+              onChange(clearRowAt(getNormalizedContent(), activeMenu.index))
+            }
+            onDelete={() => {
+              const next = deleteRowAt(getNormalizedContent(), activeMenu.index);
+              if (next) {
+                setSelectedRange(null);
+                onChange(next);
+              }
+            }}
+            onClose={() => setActiveMenu(null)}
+          />
+        </div>
+      )}
+
+      {activeMenu?.type === 'col' && (
+        <div
+          className="absolute z-50"
+          style={{ top: `${activeMenu.top}px`, left: `${activeMenu.left}px` }}
+        >
+          <ColumnActionMenu
+            colIndex={activeMenu.index}
+            canDelete={columns.length > 1}
+            onInsertLeft={() =>
+              onChange(insertColAt(getNormalizedContent(), activeMenu.index, 'left'))
+            }
+            onInsertRight={() =>
+              onChange(insertColAt(getNormalizedContent(), activeMenu.index, 'right'))
+            }
+            onDuplicate={() =>
+              onChange(duplicateColAt(getNormalizedContent(), activeMenu.index))
+            }
+            onSortAsc={() =>
+              onChange(sortCol(getNormalizedContent(), activeMenu.index, 'asc'))
+            }
+            onSortDesc={() =>
+              onChange(sortCol(getNormalizedContent(), activeMenu.index, 'desc'))
+            }
+            onClear={() =>
+              onChange(clearColAt(getNormalizedContent(), activeMenu.index))
+            }
+            onDelete={() => {
+              const next = deleteColAt(getNormalizedContent(), activeMenu.index);
+              if (next) {
+                setSelectedRange(null);
+                onChange(next);
+              }
+            }}
+            onClose={() => setActiveMenu(null)}
+          />
+        </div>
+      )}
+
       {(copied || pasted) && (
         <div className="flex justify-end mt-1 px-1">
           <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
