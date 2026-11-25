@@ -179,6 +179,8 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
   rowsRef.current = rows;
   const activeMenuRef = useRef(activeMenu);
   activeMenuRef.current = activeMenu;
+  const selectedRangeRef = useRef(selectedRange);
+  selectedRangeRef.current = selectedRange;
 
   const getNormalizedContent = useCallback((): TableBlockContent => {
     return {
@@ -220,24 +222,43 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
     return acc;
   }, []);
 
+  const colWidthsKey = activeColWidths.join(',');
+
   useLayoutEffect(() => {
     if (!fitToWidth) {
       setMeasuredColEdges([]);
       return;
     }
-    const edges = columns.map((_, ci) => {
-      const th = thRefs.current[ci];
-      if (th && th.offsetWidth > 0) {
-        return th.offsetLeft + th.offsetWidth;
-      }
-      return 0;
-    });
-    if (edges.some((e) => e > 0)) {
-      setMeasuredColEdges(edges);
-    } else {
-      setMeasuredColEdges([]);
+
+    const updateMeasuredEdges = () => {
+      const edges = columnsRef.current.map((_, ci) => {
+        const th = thRefs.current[ci];
+        if (th && th.offsetWidth > 0) {
+          return th.offsetLeft + th.offsetWidth;
+        }
+        return 0;
+      });
+      const next = edges.some((e) => e > 0) ? edges : [];
+      setMeasuredColEdges((prev) =>
+        prev.length === next.length && prev.every((v, i) => v === next[i]) ? prev : next
+      );
+    };
+
+    updateMeasuredEdges();
+
+    const tableEl = tableElRef.current;
+    if (!tableEl || typeof ResizeObserver === 'undefined') {
+      return;
     }
-  }, [fitToWidth, columns.length, totalColWidth]);
+
+    const observer = new ResizeObserver(() => {
+      updateMeasuredEdges();
+    });
+    observer.observe(tableEl);
+    return () => {
+      observer.disconnect();
+    };
+  }, [fitToWidth, columns.length, colWidthsKey]);
 
   const blurActiveEditable = useCallback(() => {
     const activeEl = document.activeElement as HTMLElement | null;
@@ -264,6 +285,7 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
       if (!cellEl) return;
       cellEl.focus();
       focusedCellRef.current = { row: r, col: c };
+      anchorRef.current = { row: r, col: c };
       placeCaret(cellEl, caret);
     },
     [getCellEditable]
@@ -403,7 +425,7 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
     setHoveredCol(c);
     if (!isSelecting || !dragStartRef.current) return;
     const start = dragStartRef.current;
-    if (start.row !== r || start.col !== c) {
+    if (start.row !== r || start.col !== c || selectedRange !== null) {
       blurActiveEditable();
       window.getSelection()?.removeAllRanges();
       setSelectedRange({ start, end: { row: r, col: c } });
@@ -633,19 +655,39 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
       dragStartRef.current = null;
     };
 
+    const handleWindowKeyDownCapture = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      const activeEl = document.activeElement as HTMLElement | null;
+      const isInsideTable = !!(tableRef.current && activeEl && tableRef.current.contains(activeEl));
+      const isEditingCell = !!(
+        isInsideTable && activeEl?.getAttribute('contenteditable') === 'true'
+      );
+      if (selectedRangeRef.current && !isEditingCell && !activeMenuRef.current) {
+        e.preventDefault();
+        e.stopPropagation();
+        setSelectedRange(null);
+      }
+    };
+
     const handleWindowKeyDown = (e: KeyboardEvent) => {
       const activeEl = document.activeElement as HTMLElement | null;
       const isInsideTable = !!(tableRef.current && activeEl && tableRef.current.contains(activeEl));
       const isEditingCell = !!(
         isInsideTable && activeEl?.getAttribute('contenteditable') === 'true'
       );
+      const activeTag = activeEl?.tagName;
+      const ceAttr = activeEl?.getAttribute('contenteditable');
+      const isFocusedElsewhere = !!(
+        activeEl &&
+        activeEl !== document.body &&
+        !isInsideTable &&
+        (activeTag === 'INPUT' ||
+          activeTag === 'TEXTAREA' ||
+          ceAttr === 'true' ||
+          ceAttr === '')
+      );
 
-      if (e.key === 'Escape') {
-        if (!isEditingCell && !activeMenuRef.current) {
-          setSelectedRange(null);
-        }
-        return;
-      }
+      if (isFocusedElsewhere) return;
 
       if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) {
         if (selectedRange || isInsideTable) {
@@ -693,20 +735,10 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
       // Printable key on a single selected cell focuses it and starts editing
       const { minR, maxR, minC, maxC } = normalizeRange(selectedRange);
       const isSingleCell = minR === maxR && minC === maxC;
-      const activeTag = activeEl?.tagName;
-      const isFocusedElsewhere = !!(
-        activeEl &&
-        activeEl !== document.body &&
-        !isInsideTable &&
-        (activeTag === 'INPUT' ||
-          activeTag === 'TEXTAREA' ||
-          activeEl.getAttribute('contenteditable') === 'true')
-      );
 
       if (
         isSingleCell &&
         !activeMenuRef.current &&
-        !isFocusedElsewhere &&
         e.key.length === 1 &&
         !e.ctrlKey &&
         !e.metaKey &&
@@ -718,6 +750,7 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
           cellEl.textContent = e.key;
           cellEl.focus();
           focusedCellRef.current = { row: minR, col: minC };
+          anchorRef.current = { row: minR, col: minC };
           placeCaret(cellEl, 'end');
         }
         setSelectedRange(null);
@@ -728,14 +761,18 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
     const handleClickOutside = (e: MouseEvent) => {
       if (tableRef.current && !tableRef.current.contains(e.target as Node)) {
         setSelectedRange(null);
+        anchorRef.current = null;
+        focusedCellRef.current = null;
       }
     };
 
     window.addEventListener('mouseup', handleWindowMouseUp);
+    window.addEventListener('keydown', handleWindowKeyDownCapture, { capture: true });
     window.addEventListener('keydown', handleWindowKeyDown);
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
       window.removeEventListener('mouseup', handleWindowMouseUp);
+      window.removeEventListener('keydown', handleWindowKeyDownCapture, { capture: true });
       window.removeEventListener('keydown', handleWindowKeyDown);
       document.removeEventListener('mousedown', handleClickOutside);
     };
@@ -805,12 +842,14 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
   };
 
   // Clipboard Copy / Cut / Paste
-  const copyFullTable = () => {
-    const tsv = serializeRangeToTsv(columns, rows, {
+  const serializeFullTableToTsv = () =>
+    serializeRangeToTsv(columns, rows, {
       start: { row: -1, col: 0 },
       end: { row: rows.length - 1, col: columns.length - 1 },
     });
-    writeClipboardText(tsv);
+
+  const copyFullTable = () => {
+    writeClipboardText(serializeFullTableToTsv());
     flashCopied();
   };
 
@@ -843,13 +882,7 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
       }
     } else if (!selection || selection.isCollapsed) {
       e.preventDefault();
-      e.clipboardData.setData(
-        'text/plain',
-        [
-          columns.map(escapeTsvCell).join('\t'),
-          ...rows.map((r) => r.map(escapeTsvCell).join('\t')),
-        ].join('\n')
-      );
+      e.clipboardData.setData('text/plain', serializeFullTableToTsv());
       flashCopied();
       return;
     }
@@ -892,12 +925,7 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
         }
 
         const resultTsv =
-          tsvRows.length > 0
-            ? tsvRows.join('\n')
-            : [
-                columns.map(escapeTsvCell).join('\t'),
-                ...rows.map((r) => r.map(escapeTsvCell).join('\t')),
-              ].join('\n');
+          tsvRows.length > 0 ? tsvRows.join('\n') : serializeFullTableToTsv();
         e.clipboardData.setData('text/plain', resultTsv);
         flashCopied();
       }
@@ -1249,6 +1277,7 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
                             onEscapeToSelect={handleEscapeToSelect}
                             onFocusCell={(r, c) => {
                               focusedCellRef.current = { row: r, col: c };
+                              anchorRef.current = { row: r, col: c };
                             }}
                             className="px-2.5 py-1.5 min-h-[1.75rem] leading-[1.45]"
                           />
@@ -1303,6 +1332,7 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
                                 onEscapeToSelect={handleEscapeToSelect}
                                 onFocusCell={(r, c) => {
                                   focusedCellRef.current = { row: r, col: c };
+                                  anchorRef.current = { row: r, col: c };
                                 }}
                                 className="px-2.5 py-1.5 min-h-[1.75rem] leading-[1.45]"
                               />

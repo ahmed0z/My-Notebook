@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TableBlock } from '../src/components/editor/blocks/TableBlock';
@@ -541,6 +541,75 @@ describe('TableBlock (Notion Simple Table)', () => {
         columnWidths: [150, 150],
       });
     });
+
+    it('recomputes measuredColEdges when fitToWidth is true on equal-sum columnWidths change and ResizeObserver', () => {
+      let observerCallback: (() => void) | null = null;
+      const observeMock = vi.fn();
+      const disconnectMock = vi.fn();
+      const OriginalResizeObserver = globalThis.ResizeObserver;
+
+      class MockResizeObserver {
+        constructor(cb: () => void) {
+          observerCallback = cb;
+        }
+        observe = observeMock;
+        disconnect = disconnectMock;
+        unobserve = vi.fn();
+      }
+      globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+
+      try {
+        const { container, rerender, unmount } = render(
+          <TableBlock
+            content={{
+              columns: ['Col 1', 'Col 2'],
+              rows: [['A', 'B']],
+              columnWidths: [100, 200],
+              fitToWidth: true,
+            }}
+            onChange={vi.fn()}
+          />
+        );
+
+        expect(observeMock).toHaveBeenCalledTimes(1);
+
+        const ths = Array.from(container.querySelectorAll('thead th')) as HTMLElement[];
+        let widths = [120, 240];
+        Object.defineProperty(ths[0], 'offsetLeft', { configurable: true, get: () => 0 });
+        Object.defineProperty(ths[0], 'offsetWidth', { configurable: true, get: () => widths[0] });
+        Object.defineProperty(ths[1], 'offsetLeft', { configurable: true, get: () => widths[0] });
+        Object.defineProperty(ths[1], 'offsetWidth', { configurable: true, get: () => widths[1] });
+
+        // Trigger ResizeObserver update
+        act(() => {
+          observerCallback?.();
+        });
+        expect(screen.getByLabelText('Resize column Col 1')).toHaveStyle({ left: '117px' });
+        expect(screen.getByLabelText('Resize column Col 2')).toHaveStyle({ left: '357px' });
+
+        // Reorder / equal-sum width change (100+200 === 200+100 === 300)
+        widths = [240, 120];
+        rerender(
+          <TableBlock
+            content={{
+              columns: ['Col 2', 'Col 1'],
+              rows: [['B', 'A']],
+              columnWidths: [200, 100],
+              fitToWidth: true,
+            }}
+            onChange={vi.fn()}
+          />
+        );
+
+        expect(screen.getByLabelText('Resize column Col 2')).toHaveStyle({ left: '237px' });
+        expect(screen.getByLabelText('Resize column Col 1')).toHaveStyle({ left: '357px' });
+
+        unmount();
+        expect(disconnectMock).toHaveBeenCalled();
+      } finally {
+        globalThis.ResizeObserver = OriginalResizeObserver;
+      }
+    });
   });
 
   describe('Keyboard navigation & Notion Enter/Tab/Arrow/Escape behavior', () => {
@@ -785,6 +854,144 @@ describe('TableBlock (Notion Simple Table)', () => {
         columns: ['Col 1'],
         rows: [['N']],
       });
+    });
+
+    it('shrinks drag-selection back to origin cell when dragging out and returning to origin', () => {
+      const { container } = render(
+        <TableBlock
+          content={{
+            columns: ['Col 1', 'Col 2'],
+            rows: [
+              ['R1C1', 'R1C2'],
+              ['R2C1', 'R2C2'],
+            ],
+          }}
+          onChange={vi.fn()}
+        />
+      );
+
+      const cells = container.querySelectorAll('td.table-data-cell');
+      fireEvent.mouseDown(cells[0], { button: 0 });
+      fireEvent.mouseEnter(cells[3]);
+      expect((cells[3] as HTMLElement).className).toContain('bg-[#2383E2]/10');
+
+      // Drag back onto origin cell (0, 0)
+      fireEvent.mouseEnter(cells[0]);
+      fireEvent.mouseUp(window);
+
+      expect((cells[0] as HTMLElement).className).toContain('bg-[#2383E2]/10');
+      expect((cells[0] as HTMLElement).style.boxShadow).toBe(
+        'inset 0 2px 0 0 #2383E2, inset 0 -2px 0 0 #2383E2, inset 2px 0 0 0 #2383E2, inset -2px 0 0 0 #2383E2'
+      );
+      expect((cells[1] as HTMLElement).className).not.toContain('bg-[#2383E2]/10');
+      expect((cells[2] as HTMLElement).className).not.toContain('bg-[#2383E2]/10');
+      expect((cells[3] as HTMLElement).className).not.toContain('bg-[#2383E2]/10');
+    });
+
+    it('updates Shift+Click anchor on Tab/Arrow navigation and resets anchor on outside click', () => {
+      const { container } = render(
+        <div>
+          <button type="button">Outside Button</button>
+          <TableBlock
+            content={{
+              columns: ['H1', 'H2'],
+              rows: [
+                ['A1', 'B1'],
+                ['A2', 'B2'],
+              ],
+            }}
+            onChange={vi.fn()}
+          />
+        </div>
+      );
+
+      const a1 = screen.getByText('A1');
+      const b1 = screen.getByText('B1');
+      const cells = container.querySelectorAll('td.table-data-cell');
+
+      // Focus A1 via mousedown + focus, then Tab to B1
+      fireEvent.mouseDown(cells[0], { button: 0 });
+      fireEvent.mouseUp(window);
+      a1.focus();
+      fireEvent.keyDown(a1, { key: 'Tab', shiftKey: false });
+      expect(document.activeElement).toBe(b1);
+
+      // Shift+Click B2 -> anchor should be B1 (0, 1), NOT stale A1 (0, 0)
+      fireEvent.mouseDown(cells[3], { button: 0, shiftKey: true });
+      expect((cells[0] as HTMLElement).className).not.toContain('bg-[#2383E2]/10');
+      expect((cells[1] as HTMLElement).className).toContain('bg-[#2383E2]/10');
+      expect((cells[2] as HTMLElement).className).not.toContain('bg-[#2383E2]/10');
+      expect((cells[3] as HTMLElement).className).toContain('bg-[#2383E2]/10');
+
+      // Click outside resets anchor and clears selection
+      fireEvent.mouseDown(screen.getByRole('button', { name: /outside button/i }));
+      expect((cells[1] as HTMLElement).className).not.toContain('bg-[#2383E2]/10');
+      expect((cells[3] as HTMLElement).className).not.toContain('bg-[#2383E2]/10');
+
+      // Subsequent Shift+Click on A2 selects only A2 instead of using stale B1 anchor
+      fireEvent.mouseDown(cells[2], { button: 0, shiftKey: true });
+      expect((cells[2] as HTMLElement).className).toContain('bg-[#2383E2]/10');
+      expect((cells[1] as HTMLElement).className).not.toContain('bg-[#2383E2]/10');
+      expect((cells[3] as HTMLElement).className).not.toContain('bg-[#2383E2]/10');
+    });
+
+    it('does not hijack typing, Backspace, or Ctrl+A in an outside input while selectedRange is active', () => {
+      const onChange = vi.fn();
+      const { container } = render(
+        <div>
+          <input aria-label="Outside Input" defaultValue="hello" />
+          <TableBlock
+            content={{
+              columns: ['Col 1', 'Col 2'],
+              rows: [['R1C1', 'R1C2']],
+            }}
+            onChange={onChange}
+          />
+        </div>
+      );
+
+      // Select cell (0, 0) in the table
+      const r1c1 = screen.getByText('R1C1');
+      const td0 = r1c1.closest('td')!;
+      r1c1.focus();
+      fireEvent.keyDown(r1c1, { key: 'Escape' });
+      expect(td0.className).toContain('bg-[#2383E2]/10');
+
+      // Move focus to the outside input without clicking outside (e.g. Tab / programmatic focus)
+      const outsideInput = screen.getByLabelText('Outside Input') as HTMLInputElement;
+      outsideInput.focus();
+      expect(document.activeElement).toBe(outsideInput);
+
+      // Ctrl+A in outside input must NOT select whole table or preventDefault
+      const ctrlA = new KeyboardEvent('keydown', {
+        key: 'a',
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      outsideInput.dispatchEvent(ctrlA);
+      expect(ctrlA.defaultPrevented).toBe(false);
+      expect(container.querySelectorAll('thead th')[1].className).not.toContain('bg-[#2383E2]/10');
+
+      // Backspace in outside input must NOT clear the selected table cell
+      const backspace = new KeyboardEvent('keydown', {
+        key: 'Backspace',
+        bubbles: true,
+        cancelable: true,
+      });
+      outsideInput.dispatchEvent(backspace);
+      expect(backspace.defaultPrevented).toBe(false);
+
+      // Printable key in outside input must NOT overwrite or focus the table cell
+      const typing = new KeyboardEvent('keydown', {
+        key: 'Z',
+        bubbles: true,
+        cancelable: true,
+      });
+      outsideInput.dispatchEvent(typing);
+      expect(typing.defaultPrevented).toBe(false);
+      expect(document.activeElement).toBe(outsideInput);
+      expect(onChange).not.toHaveBeenCalled();
     });
   });
 

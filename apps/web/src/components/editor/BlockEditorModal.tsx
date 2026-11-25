@@ -133,6 +133,7 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       if (e.key === 'Escape') {
         if (activeMenuBlockId) {
           setActiveMenuBlockId(null);

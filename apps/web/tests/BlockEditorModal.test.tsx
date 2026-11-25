@@ -758,7 +758,7 @@ describe('BlockEditorModal', () => {
     expect(screen.getByDisplayValue('Note 2')).toBeInTheDocument();
   });
 
-  it('preserves table columnWidths, rowHeights, hasHeaderRow, hasHeaderColumn, fitToWidth, and 1-row empty rows across render and cell edit', async () => {
+  it('preserves table columnWidths, rowHeights, hasHeaderRow, hasHeaderColumn, and fitToWidth across render and cell edit', async () => {
     const tableContent = {
       columns: ['Item', 'Notes'],
       rows: [['Alpha', 'Beta']],
@@ -895,5 +895,87 @@ describe('BlockEditorModal', () => {
         1
       );
     });
+  });
+
+  it('clears table cell editing and selectedRange on Escape without closing BlockEditorModal or exiting fullscreen', async () => {
+    const tableNote: NoteDto = {
+      id: 'note-table-esc',
+      title: 'Table Escape Note',
+      color: '#ffffff',
+      position: 0,
+      isPinned: false,
+      isArchived: false,
+      createdAt: '',
+      updatedAt: '',
+      blocks: [
+        {
+          id: 'tb-esc',
+          noteId: 'note-table-esc',
+          type: 'table',
+          content: {
+            columns: ['H1', 'H2'],
+            rows: [
+              ['A1', 'B1'],
+              ['A2', 'B2'],
+            ],
+          },
+          position: 0,
+          createdAt: '',
+          updatedAt: '',
+        },
+      ],
+    };
+
+    (ApiClient.getNote as any).mockResolvedValueOnce(tableNote);
+    const onClose = vi.fn();
+
+    render(<BlockEditorModal note={tableNote} onClose={onClose} onNoteUpdated={() => {}} />);
+
+    await screen.findByRole('table');
+
+    // Enter fullscreen so we verify Escape neither exits fullscreen nor closes the modal
+    fireEvent.click(screen.getByTitle('Full screen'));
+    expect(screen.getByTitle('Exit full screen')).toBeInTheDocument();
+
+    // Re-query table after toggling fullscreen since fullscreen renders a separate modal tree
+    const table = screen.getByRole('table');
+
+    // 1. Escape while editing a table cell blurs into single-cell selection without exiting fullscreen or closing
+    const editableA1 = screen.getByText('A1');
+    const tdA1 = editableA1.closest('td')!;
+    editableA1.focus();
+    fireEvent.keyDown(editableA1, { key: 'Escape' });
+
+    expect(document.activeElement).not.toBe(editableA1);
+    expect(tdA1.className).toContain('bg-[#2383E2]/10');
+    expect(screen.getByTitle('Exit full screen')).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+
+    // 2. Escape while a table cell range is selected clears the selection without exiting fullscreen or closing
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(tdA1.className).not.toContain('bg-[#2383E2]/10');
+    expect(screen.getByTitle('Exit full screen')).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+
+    // Drag-select a 2x2 range and verify Escape clears the range without closing or exiting fullscreen
+    const cells = table.querySelectorAll('td.table-data-cell');
+    fireEvent.mouseDown(cells[0], { button: 0 });
+    fireEvent.mouseEnter(cells[3]);
+    fireEvent.mouseUp(window);
+    expect(cells[3].className).toContain('bg-[#2383E2]/10');
+
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(cells[0].className).not.toContain('bg-[#2383E2]/10');
+    expect(cells[3].className).not.toContain('bg-[#2383E2]/10');
+    expect(screen.getByTitle('Exit full screen')).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+
+    // 3. Now with no table selection, Escape exits fullscreen, and the next Escape closes the modal
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(screen.getByTitle('Full screen')).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
