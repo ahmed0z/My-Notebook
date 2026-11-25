@@ -79,6 +79,11 @@ export function validateBlockContent(type: BlockType, content: unknown): { valid
         }
       }
     }
+    for (const flag of ['hasHeaderRow', 'hasHeaderColumn', 'fitToWidth'] as const) {
+      if (c[flag] !== undefined && typeof c[flag] !== 'boolean') {
+        return { valid: false, error: `Table ${flag} must be a boolean` };
+      }
+    }
     return { valid: true };
   }
 

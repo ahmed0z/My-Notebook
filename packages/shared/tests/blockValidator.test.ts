@@ -43,6 +43,40 @@ describe('validateBlockContent', () => {
     expect(resHeight.valid).toBe(false);
   });
 
+  it('validates table block with optional boolean header and fitToWidth flags', () => {
+    const res = validateBlockContent('table', {
+      columns: ['A', 'B'],
+      rows: [['1', '2']],
+      hasHeaderRow: true,
+      hasHeaderColumn: false,
+      fitToWidth: true,
+    });
+    expect(res.valid).toBe(true);
+  });
+
+  it('rejects table block when hasHeaderRow, hasHeaderColumn, or fitToWidth is not a boolean', () => {
+    const resHeaderRow = validateBlockContent('table', {
+      columns: ['A'],
+      rows: [['1']],
+      hasHeaderRow: 'true',
+    });
+    expect(resHeaderRow.valid).toBe(false);
+
+    const resHeaderCol = validateBlockContent('table', {
+      columns: ['A'],
+      rows: [['1']],
+      hasHeaderColumn: 1,
+    });
+    expect(resHeaderCol.valid).toBe(false);
+
+    const resFitToWidth = validateBlockContent('table', {
+      columns: ['A'],
+      rows: [['1']],
+      fitToWidth: null,
+    });
+    expect(resFitToWidth.valid).toBe(false);
+  });
+
   describe('image block validation', () => {
     it('validates a valid image block with url only', () => {
       const res = validateBlockContent('image' as any, { url: '/uploads/sample.png' });

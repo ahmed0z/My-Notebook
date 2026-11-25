@@ -22,6 +22,9 @@ export interface TableBlockContent {
   rows: string[][];
   columnWidths?: number[];
   rowHeights?: number[];
+  hasHeaderRow?: boolean;
+  hasHeaderColumn?: boolean;
+  fitToWidth?: boolean;
 }
 
 export type BlockContent = TextBlockContent | ChecklistBlockContent | TableBlockContent | ImageBlockContent;
