@@ -202,10 +202,19 @@ describe('TableBlock (Notion Simple Table)', () => {
       const ths = container.querySelectorAll('thead th');
       expect(ths[0].className).toContain('bg-stone-100/70');
       expect(ths[1].className).not.toContain('bg-stone-100/70');
-      // Body col 0 has header fill, body col 1 does not
+      // Body col 0 has header fill, body col 1 does not; TableCell header typography matches thead col 0 cleanly
       const tds = container.querySelectorAll('tbody td');
       expect(tds[0].className).toContain('bg-stone-100/70');
       expect(tds[1].className).not.toContain('bg-stone-100/70');
+
+      const th0Editable = ths[0].querySelector('[contenteditable="true"]')!;
+      const td0Editable = tds[0].querySelector('[contenteditable="true"]')!;
+      const td1Editable = tds[1].querySelector('[contenteditable="true"]')!;
+      expect(th0Editable.className).toBe(td0Editable.className);
+      expect(td0Editable.className).toContain('font-semibold');
+      expect(td0Editable.className).not.toContain('text-sm');
+      expect(td1Editable.className).toContain('text-sm');
+      expect(td1Editable.className).not.toContain('font-semibold');
     });
 
     it('copies table as TSV and clears contents from Options menu', async () => {

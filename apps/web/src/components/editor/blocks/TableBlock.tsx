@@ -1304,11 +1304,7 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
                                 onFocusCell={(r, c) => {
                                   focusedCellRef.current = { row: r, col: c };
                                 }}
-                                className={`px-2.5 py-1.5 min-h-[1.75rem] text-sm leading-[1.45] ${
-                                  isHeaderStyled
-                                    ? 'font-medium text-stone-800 dark:text-stone-100'
-                                    : 'font-normal text-stone-800 dark:text-stone-100'
-                                }`}
+                                className="px-2.5 py-1.5 min-h-[1.75rem] leading-[1.45]"
                               />
                             </td>
                           );
