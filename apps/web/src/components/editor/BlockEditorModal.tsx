@@ -899,10 +899,10 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
         >
           <div
             data-testid="note-content-column"
-            className={`flex-1 flex flex-col w-full pb-32 transition-all duration-300 ease-in-out ${
+            className={`flex-1 flex flex-col w-full pt-8 pb-6 transition-all duration-300 ease-in-out ${
               isFullWidth
-                ? 'w-full max-w-full px-8 sm:px-12 md:px-16 py-8'
-                : 'max-w-4xl mx-auto px-6 sm:px-8 py-8'
+                ? 'w-full max-w-full px-8 sm:px-12 md:px-16'
+                : 'max-w-4xl mx-auto px-6 sm:px-8'
             }`}
           >
             {loading ? (
@@ -1156,7 +1156,7 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
           {/* Click anywhere below to add block (Notion style) */}
           <div
             data-testid="block-canvas-area"
-            className="flex-1 min-h-[140px] cursor-text pb-20 pt-4"
+            className="flex-1 min-h-[80px] cursor-text pb-8 pt-3"
             onClick={handleCanvasClick}
             onDragOver={(e) => {
               if (draggedIndex !== null) {

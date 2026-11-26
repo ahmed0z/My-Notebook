@@ -1155,5 +1155,32 @@ describe('TableBlock (Notion Simple Table)', () => {
       expect(editableDiv.className).toContain('break-words');
       expect(editableDiv.className).toContain('min-h-[1.75rem]');
     });
+
+    it('shows + edge buttons only on direct hover (not table hover) and uses compact Notion pill handles', () => {
+      render(
+        <TableBlock
+          content={{
+            columns: ['Col 1'],
+            rows: [['A']],
+          }}
+          onChange={vi.fn()}
+        />
+      );
+
+      for (const label of ['Add column', 'Add row', 'Add row and column']) {
+        const btn = screen.getByRole('button', { name: label });
+        expect(btn.className).toContain('opacity-0');
+        expect(btn.className).toContain('hover:opacity-100');
+        expect(btn.className).not.toContain('group-hover/table');
+      }
+
+      const rowHandle = screen.getByRole('button', { name: 'Row 1 options' });
+      expect(rowHandle.className).toContain('w-2.5');
+      expect(rowHandle.className).toContain('h-4');
+
+      const colHandle = screen.getByRole('button', { name: 'Column 1 options' });
+      expect(colHandle.className).toContain('h-2.5');
+      expect(colHandle.className).toContain('w-4');
+    });
   });
 });

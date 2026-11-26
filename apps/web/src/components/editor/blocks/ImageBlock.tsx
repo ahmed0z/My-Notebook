@@ -183,33 +183,33 @@ export const ImageBlock: React.FC<ImageBlockProps> = ({ content, onChange, onDel
 
   // 2. Image Loaded state
   return (
-    <div className="group/image relative w-full my-2 flex flex-col items-center">
-      {/* Floating Toolbar Controls */}
-      <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover/image:opacity-100 transition-opacity bg-stone-900/70 backdrop-blur-md px-1.5 py-1 rounded-lg text-white z-10">
-        <button
-          type="button"
-          onClick={handleClearImage}
-          title="Replace image"
-          aria-label="Replace image"
-          className="p-1 hover:bg-white/20 rounded text-xs transition"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-        </button>
-        {onDelete && (
+    <div className="group/image w-full my-2 flex flex-col items-start">
+      {/* Image Preview + Floating Toolbar anchored to image bounds */}
+      <div className="relative inline-flex max-w-fit overflow-hidden rounded-xl bg-stone-100 dark:bg-stone-800/50 border border-stone-200/60 dark:border-stone-700/60">
+        {/* Floating Toolbar Controls */}
+        <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover/image:opacity-100 transition-opacity bg-stone-900/70 backdrop-blur-md px-1.5 py-1 rounded-lg text-white z-10">
           <button
             type="button"
-            onClick={onDelete}
-            title="Delete image block"
-            aria-label="Delete image block"
-            className="p-1 hover:bg-red-500/80 rounded text-xs text-red-200 hover:text-white transition"
+            onClick={handleClearImage}
+            title="Replace image"
+            aria-label="Replace image"
+            className="p-1 hover:bg-white/20 rounded text-xs transition"
           >
-            <Trash2 className="w-3.5 h-3.5" />
+            <RefreshCw className="w-3.5 h-3.5" />
           </button>
-        )}
-      </div>
+          {onDelete && (
+            <button
+              type="button"
+              onClick={onDelete}
+              title="Delete image block"
+              aria-label="Delete image block"
+              className="p-1 hover:bg-red-500/80 rounded text-xs text-red-200 hover:text-white transition"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
 
-      {/* Image Preview */}
-      <div className="inline-flex max-w-fit mx-auto overflow-hidden rounded-xl bg-stone-100 dark:bg-stone-800/50 border border-stone-200/60 dark:border-stone-700/60">
         <img
           src={url}
           alt={caption || 'Note image'}
@@ -226,7 +226,7 @@ export const ImageBlock: React.FC<ImageBlockProps> = ({ content, onChange, onDel
           aria-label="Image caption"
           value={caption}
           onChange={(e) => onChange({ ...(content || {}), caption: e.target.value })}
-          className="w-full text-center text-xs text-stone-500 dark:text-stone-400 bg-transparent border-b border-transparent hover:border-stone-200 focus:border-stone-300 dark:focus:border-stone-600 focus:outline-none py-1 placeholder-stone-400 dark:placeholder-stone-500 transition-colors"
+          className="w-full text-left text-xs text-stone-500 dark:text-stone-400 bg-transparent border-b border-transparent hover:border-stone-200 focus:border-stone-300 dark:focus:border-stone-600 focus:outline-none py-1 placeholder-stone-400 dark:placeholder-stone-500 transition-colors"
         />
       </div>
     </div>

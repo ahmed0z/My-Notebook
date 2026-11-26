@@ -1107,11 +1107,11 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
         title="Click for row options or drag to reorder"
         onMouseDown={(e) => handleRowHandleMouseDown(e, rowIndex)}
         onMouseEnter={() => setHoveredRow(rowIndex)}
-        className={`absolute -left-3.5 top-1/2 -translate-y-1/2 z-30 flex items-center justify-center w-3.5 h-5 rounded border border-stone-300/80 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700 shadow-xs cursor-grab active:cursor-grabbing transition-opacity ${
+        className={`absolute -left-2.5 top-1/2 -translate-y-1/2 z-30 flex items-center justify-center w-2.5 h-4 rounded-[3px] border border-stone-300/80 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700 shadow-xs cursor-grab active:cursor-grabbing transition-opacity ${
           isVisible ? 'opacity-100' : 'opacity-0 hover:opacity-100 focus-visible:opacity-100'
         }`}
       >
-        <GripVertical className="w-3 h-3" />
+        <GripVertical className="w-2.5 h-2.5" />
       </button>
     );
   };
@@ -1128,11 +1128,11 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
         title="Click for column options or drag to reorder"
         onMouseDown={(e) => handleColHandleMouseDown(e, colIndex)}
         onMouseEnter={() => setHoveredCol(colIndex)}
-        className={`absolute -top-3.5 left-1/2 -translate-x-1/2 z-30 flex items-center justify-center h-3.5 w-6 rounded border border-stone-300/80 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700 shadow-xs cursor-grab active:cursor-grabbing transition-opacity ${
+        className={`absolute -top-2.5 left-1/2 -translate-x-1/2 z-30 flex items-center justify-center h-2.5 w-4 rounded-[3px] border border-stone-300/80 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700 shadow-xs cursor-grab active:cursor-grabbing transition-opacity ${
           isVisible ? 'opacity-100' : 'opacity-0 hover:opacity-100 focus-visible:opacity-100'
         }`}
       >
-        <MoreHorizontal className="w-3 h-3" />
+        <MoreHorizontal className="w-2.5 h-2.5" />
       </button>
     );
   };
@@ -1396,7 +1396,7 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
               onClick={addColumn}
               aria-label="Add column"
               title="Add column"
-              className="w-4 ml-1 shrink-0 rounded-sm bg-stone-200/70 dark:bg-stone-800/80 hover:bg-stone-300/80 dark:hover:bg-stone-700 text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-100 flex items-center justify-center opacity-0 group-hover/table:opacity-50 hover:!opacity-100 focus-visible:opacity-100 transition-opacity"
+              className="w-4 ml-1 shrink-0 rounded-sm bg-stone-200/70 dark:bg-stone-800/80 hover:bg-stone-300/80 dark:hover:bg-stone-700 text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-100 flex items-center justify-center opacity-0 hover:opacity-100 focus-visible:opacity-100 transition-opacity"
             >
               <Plus className="w-3 h-3" />
             </button>
@@ -1409,7 +1409,7 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
               onClick={addRow}
               aria-label="Add row"
               title="Add row"
-              className="h-4 flex-1 min-w-0 rounded-sm bg-stone-200/70 dark:bg-stone-800/80 hover:bg-stone-300/80 dark:hover:bg-stone-700 text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-100 flex items-center justify-center opacity-0 group-hover/table:opacity-50 hover:!opacity-100 focus-visible:opacity-100 transition-opacity"
+              className="h-4 flex-1 min-w-0 rounded-sm bg-stone-200/70 dark:bg-stone-800/80 hover:bg-stone-300/80 dark:hover:bg-stone-700 text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-100 flex items-center justify-center opacity-0 hover:opacity-100 focus-visible:opacity-100 transition-opacity"
             >
               <Plus className="w-3 h-3" />
             </button>
@@ -1418,7 +1418,7 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
               onClick={addRowAndColumn}
               aria-label="Add row and column"
               title="Add row and column"
-              className="w-4 h-4 ml-1 shrink-0 rounded-sm bg-stone-200/70 dark:bg-stone-800/80 hover:bg-stone-300/80 dark:hover:bg-stone-700 text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-100 flex items-center justify-center opacity-0 group-hover/table:opacity-50 hover:!opacity-100 focus-visible:opacity-100 transition-opacity"
+              className="w-4 h-4 ml-1 shrink-0 rounded-sm bg-stone-200/70 dark:bg-stone-800/80 hover:bg-stone-300/80 dark:hover:bg-stone-700 text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-100 flex items-center justify-center opacity-0 hover:opacity-100 focus-visible:opacity-100 transition-opacity"
             >
               <Plus className="w-3 h-3" />
             </button>

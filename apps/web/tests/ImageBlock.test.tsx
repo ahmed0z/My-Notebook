@@ -263,7 +263,7 @@ describe('ImageBlock (Web)', () => {
       );
     });
 
-    it('wraps rendered image in an auto-fitting container without stretching background to full width', () => {
+    it('wraps rendered image in an auto-fitting left-aligned container without stretching background to full width', () => {
       render(
         <ImageBlock
           content={{ url: 'https://example.com/test.png', caption: 'Test photo' }}
@@ -274,6 +274,14 @@ describe('ImageBlock (Web)', () => {
       const container = img.closest('div');
       expect(container).toHaveClass('max-w-fit');
       expect(container).not.toHaveClass('w-full');
+      expect(container).not.toHaveClass('mx-auto');
+
+      const outerWrapper = container?.parentElement;
+      expect(outerWrapper).toHaveClass('items-start');
+      expect(outerWrapper).not.toHaveClass('items-center');
+
+      const captionInput = screen.getByPlaceholderText(/add a caption/i);
+      expect(captionInput).toHaveClass('text-left');
     });
   });
 });

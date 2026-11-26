@@ -94,7 +94,7 @@ export const BacklinksPanel: React.FC<BacklinksPanelProps> = ({
   }, [noteId]);
 
   return (
-    <div className={`mt-4 pt-2 border-t border-stone-200/60 dark:border-stone-800 ${className}`}>
+    <div className={`mt-2 pt-2 border-t border-stone-200/60 dark:border-stone-800 ${className}`}>
       <button
         type="button"
         data-testid="backlinks-toggle"
@@ -117,7 +117,7 @@ export const BacklinksPanel: React.FC<BacklinksPanelProps> = ({
       </button>
 
       {isExpanded && (
-        <div className="mt-2">
+        <div className={`mt-2 ${backlinks.length > 0 ? 'pb-4' : ''}`}>
           {loading ? (
             <div className="flex items-center gap-2 py-3 text-xs text-stone-400 dark:text-stone-500">
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
