@@ -1,4 +1,6 @@
 import React from 'react';
+import { Check } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
 
 export const KEEP_COLORS: { name: string; hex: string }[] = [
   { name: 'Default', hex: '#ffffff' },
@@ -21,27 +23,44 @@ interface ColorPickerProps {
 }
 
 export const ColorPicker: React.FC<ColorPickerProps> = ({ currentColor, onSelectColor }) => {
+  const { isDark, getNoteCardColor } = useTheme();
+  const normalizedCurrent = (currentColor || '#ffffff').toLowerCase();
+
   return (
-    <div className="flex flex-row flex-nowrap items-center gap-1.5 px-2.5 py-1.5 bg-white/95 dark:bg-stone-900/95 backdrop-blur-md rounded-full shadow-xl border border-stone-200/80 dark:border-stone-800 z-50 overflow-x-auto whitespace-nowrap custom-scrollbar max-w-[92vw] sm:max-w-none">
-      {KEEP_COLORS.map(c => (
-        <button
-          key={c.hex}
-          type="button"
-          title={c.name}
-          aria-label={c.name}
-          aria-pressed={currentColor.toLowerCase() === c.hex.toLowerCase()}
-          onClick={(e) => {
-            e.stopPropagation();
-            onSelectColor(c.hex);
-          }}
-          className={`w-6 h-6 shrink-0 rounded-full border transition-transform hover:scale-115 ${
-            currentColor.toLowerCase() === c.hex.toLowerCase()
-              ? 'ring-2 ring-stone-900 dark:ring-stone-100 border-white dark:border-stone-900 scale-110 shadow-sm'
-              : 'border-stone-300/80 dark:border-stone-700/80 hover:border-stone-500'
-          }`}
-          style={{ backgroundColor: c.hex }}
-        />
-      ))}
+    <div className="flex flex-row flex-nowrap items-center gap-2 px-3 py-2 bg-white dark:bg-stone-900 rounded-2xl shadow-xl border border-stone-200 dark:border-stone-700/80 z-50 overflow-x-auto whitespace-nowrap custom-scrollbar max-w-[92vw] sm:max-w-none">
+      {KEEP_COLORS.map((c) => {
+        const isSelected = normalizedCurrent === c.hex.toLowerCase();
+        const swatchBg = getNoteCardColor(c.hex, isDark);
+
+        return (
+          <button
+            key={c.hex}
+            type="button"
+            title={c.name}
+            aria-label={c.name}
+            aria-pressed={isSelected}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelectColor(c.hex);
+            }}
+            className={`w-7 h-7 shrink-0 rounded-full flex items-center justify-center transition-colors ${
+              isSelected
+                ? 'ring-2 ring-stone-900 dark:ring-stone-100 ring-offset-2 ring-offset-white dark:ring-offset-stone-900 border border-transparent'
+                : 'border border-stone-300 dark:border-stone-600 hover:border-stone-500 dark:hover:border-stone-400'
+            }`}
+            style={{ backgroundColor: swatchBg }}
+          >
+            {isSelected && (
+              <Check
+                className={`w-3.5 h-3.5 stroke-[2.5] ${
+                  isDark ? 'text-stone-100' : 'text-stone-800'
+                }`}
+                aria-hidden="true"
+              />
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 };
