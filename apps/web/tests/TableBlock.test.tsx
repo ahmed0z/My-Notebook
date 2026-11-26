@@ -1171,16 +1171,21 @@ describe('TableBlock (Notion Simple Table)', () => {
         const btn = screen.getByRole('button', { name: label });
         expect(btn.className).toContain('opacity-0');
         expect(btn.className).toContain('hover:opacity-100');
+        expect(btn.className).toContain('border-stone-200/90');
         expect(btn.className).not.toContain('group-hover/table');
       }
 
       const rowHandle = screen.getByRole('button', { name: 'Row 1 options' });
-      expect(rowHandle.className).toContain('w-2.5');
-      expect(rowHandle.className).toContain('h-4');
+      expect(rowHandle.className).toContain('left-0');
+      expect(rowHandle.className).toContain('w-1.5');
+      expect(rowHandle.className).toContain('hover:w-3');
+      expect(rowHandle.className).toContain('hover:h-4');
 
       const colHandle = screen.getByRole('button', { name: 'Column 1 options' });
-      expect(colHandle.className).toContain('h-2.5');
-      expect(colHandle.className).toContain('w-4');
+      expect(colHandle.className).toContain('top-0');
+      expect(colHandle.className).toContain('h-1.5');
+      expect(colHandle.className).toContain('hover:h-3');
+      expect(colHandle.className).toContain('hover:w-4');
     });
   });
 });
