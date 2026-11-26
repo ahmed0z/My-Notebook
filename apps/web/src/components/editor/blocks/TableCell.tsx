@@ -261,8 +261,8 @@ export const TableCell: React.FC<TableCellProps> = ({
   const baseClassName =
     'w-full outline-none focus:outline-none select-text cursor-text whitespace-pre-wrap break-words';
   const variantClassName = isHeaderCell
-    ? 'font-semibold text-xs text-stone-700 dark:text-stone-200'
-    : 'text-sm text-stone-800 dark:text-stone-100';
+    ? 'font-semibold text-xs text-stone-900/85 dark:text-stone-200'
+    : 'text-sm text-stone-900 dark:text-stone-100';
   const combinedClassName = className
     ? `${baseClassName} ${variantClassName} ${className}`
     : `${baseClassName} ${variantClassName} px-2.5 py-1.5 min-h-[1.75rem]`;

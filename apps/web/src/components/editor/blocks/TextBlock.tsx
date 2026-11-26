@@ -31,7 +31,7 @@ export const TextBlock: React.FC<TextBlockProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const levelClasses = {
-    paragraph: 'text-base font-normal text-stone-800 dark:text-stone-200',
+    paragraph: 'text-base font-normal text-stone-900 dark:text-stone-200',
     h1: 'text-2xl font-bold text-stone-900 dark:text-white',
     h2: 'text-xl font-semibold text-stone-900 dark:text-white',
     h3: 'text-lg font-medium text-stone-900 dark:text-stone-100'
@@ -157,7 +157,7 @@ export const TextBlock: React.FC<TextBlockProps> = ({
         onClick={handleCursorEvent}
         onKeyUp={handleCursorEvent}
         rows={Math.max(1, currentText.split('\n').length)}
-        className={`w-full bg-transparent resize-none border-none focus:outline-none placeholder-stone-400 dark:placeholder-stone-500 select-text ${levelClasses[currentLevel]}`}
+        className={`w-full bg-transparent resize-none border-none focus:outline-none placeholder:text-black/45 dark:placeholder:text-stone-500 select-text ${levelClasses[currentLevel]}`}
       />
 
       {/* Slash Command Menu */}

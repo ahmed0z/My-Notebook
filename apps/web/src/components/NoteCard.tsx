@@ -36,7 +36,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({
     <div
       onClick={() => onSelect(note)}
       style={{ backgroundColor: cardBg }}
-      className={`group relative rounded-2xl p-4 border border-stone-200/70 hover:border-stone-400/80 dark:border-stone-800 dark:hover:border-stone-700 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between ${
+      className={`group relative rounded-2xl p-4 border border-black/[0.12] hover:border-black/30 dark:border-stone-800 dark:hover:border-stone-700 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between ${
         (showColorPicker || showSpacePicker) ? 'z-30' : 'z-0'
       }`}
     >
@@ -47,8 +47,8 @@ export const NoteCard: React.FC<NoteCardProps> = ({
               {note.title || 'Untitled Note'}
             </h3>
             {currentSpace && (
-              <div className="flex items-center gap-1 mt-1 text-[11px] font-medium text-amber-700 dark:text-amber-300">
-                <Folder className="w-3 h-3 text-amber-500 shrink-0" />
+              <div className="flex items-center gap-1 mt-1 text-[11px] font-medium text-amber-800 dark:text-amber-300">
+                <Folder className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
                 <span className="truncate">{currentSpace.name}</span>
               </div>
             )}
@@ -61,7 +61,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({
               e.stopPropagation();
               onPinToggle(note);
             }}
-            className={`p-1 rounded-lg text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100 transition-opacity ${
+            className={`p-1 rounded-lg text-black/60 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100 transition-opacity ${
               note.isPinned ? 'opacity-100 text-stone-900 dark:text-stone-100' : 'opacity-0 group-hover:opacity-100'
             }`}
           >
@@ -70,7 +70,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({
         </div>
 
         {note.blocks && note.blocks.length > 0 ? (
-          <div className="text-sm text-stone-600 dark:text-stone-300 space-y-1.5 my-2">
+          <div className="text-sm text-stone-800/85 dark:text-stone-300 space-y-1.5 my-2">
             {note.blocks.slice(0, 3).map(b => {
               try {
                 const raw = (b as any).contentJson ?? b.content;
@@ -83,22 +83,22 @@ export const NoteCard: React.FC<NoteCardProps> = ({
                   return (
                     <div key={b.id} className="space-y-0.5">
                       {items.slice(0, 2).map((it: any) => (
-                        <div key={it.id} className="flex items-center gap-1.5 text-xs text-stone-700 dark:text-stone-300">
-                          <span className="w-3.5 h-3.5 rounded-md border border-stone-400 dark:border-stone-500 bg-transparent flex items-center justify-center text-[9px] text-stone-700 dark:text-stone-300 shrink-0">
+                        <div key={it.id} className="flex items-center gap-1.5 text-xs text-stone-800/85 dark:text-stone-300">
+                          <span className="w-3.5 h-3.5 rounded-md border border-black/40 dark:border-stone-500 bg-transparent flex items-center justify-center text-[9px] text-stone-900 dark:text-stone-300 shrink-0">
                             {it.checked ? '✓' : ''}
                           </span>
-                          <span className={`line-clamp-1 ${it.checked ? 'line-through text-stone-400 dark:text-stone-500' : ''}`}>{it.text}</span>
+                          <span className={`line-clamp-1 ${it.checked ? 'line-through text-black/45 dark:text-stone-500' : ''}`}>{it.text}</span>
                         </div>
                       ))}
                     </div>
                   );
                 }
                 if (b.type === 'table') {
-                  return <p key={b.id} className="text-xs text-stone-500 dark:text-stone-400 italic">Table ({parsed.columns?.length || 0} cols)</p>;
+                  return <p key={b.id} className="text-xs text-black/60 dark:text-stone-400 italic">Table ({parsed.columns?.length || 0} cols)</p>;
                 }
                 if (b.type === 'image') {
                   return (
-                    <div key={b.id} className="w-full h-24 rounded-lg overflow-hidden bg-stone-100 dark:bg-stone-800 flex items-center justify-center my-1">
+                    <div key={b.id} className="w-full h-24 rounded-lg overflow-hidden bg-black/[0.06] dark:bg-stone-800 flex items-center justify-center my-1">
                       <img src={parsed.url} alt={parsed.caption || 'Note attachment'} className="w-full h-full object-cover" />
                     </div>
                   );
@@ -110,7 +110,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({
             })}
           </div>
         ) : (
-          <p className="text-xs text-stone-400 dark:text-stone-500 italic">Empty note</p>
+          <p className="text-xs text-black/45 dark:text-stone-500 italic">Empty note</p>
         )}
       </div>
 
@@ -125,7 +125,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({
                 e.stopPropagation();
                 setShowColorPicker(!showColorPicker);
               }}
-              className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-stone-600 dark:text-stone-400 hover:dark:text-stone-200 transition"
+              className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-black/60 dark:text-stone-400 hover:text-stone-900 hover:dark:text-stone-200 transition"
             >
               <Palette className="w-3.5 h-3.5" />
             </button>
@@ -161,7 +161,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({
                   e.stopPropagation();
                   setShowSpacePicker(!showSpacePicker);
                 }}
-                className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-stone-600 dark:text-stone-400 hover:dark:text-stone-200 transition"
+                className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-black/60 dark:text-stone-400 hover:text-stone-900 hover:dark:text-stone-200 transition"
               >
                 <FolderInput className="w-3.5 h-3.5" />
               </button>

@@ -1107,7 +1107,7 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
         title="Click for row options or drag to reorder"
         onMouseDown={(e) => handleRowHandleMouseDown(e, rowIndex)}
         onMouseEnter={() => setHoveredRow(rowIndex)}
-        className={`group/row-handle absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 z-30 flex items-center justify-center rounded-full border border-stone-300/90 dark:border-stone-600 bg-white dark:bg-stone-800 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700 shadow-xs cursor-grab active:cursor-grabbing transition-all duration-150 ${
+        className={`group/row-handle absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 z-30 flex items-center justify-center rounded-full border border-black/20 dark:border-stone-600 bg-white dark:bg-stone-800 text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700 shadow-xs cursor-grab active:cursor-grabbing transition-all duration-150 ${
           isMenuOrDrag
             ? 'w-3 h-4 rounded-[3px] opacity-100'
             : isVisible
@@ -1136,7 +1136,7 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
         title="Click for column options or drag to reorder"
         onMouseDown={(e) => handleColHandleMouseDown(e, colIndex)}
         onMouseEnter={() => setHoveredCol(colIndex)}
-        className={`group/col-handle absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 flex items-center justify-center rounded-full border border-stone-300/90 dark:border-stone-600 bg-white dark:bg-stone-800 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700 shadow-xs cursor-grab active:cursor-grabbing transition-all duration-150 ${
+        className={`group/col-handle absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 flex items-center justify-center rounded-full border border-black/20 dark:border-stone-600 bg-white dark:bg-stone-800 text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700 shadow-xs cursor-grab active:cursor-grabbing transition-all duration-150 ${
           isMenuOrDrag
             ? 'h-3 w-4 rounded-[3px] opacity-100'
             : isVisible
@@ -1154,9 +1154,9 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
   };
 
   const totalRows = 1 + rows.length;
-  const headerCellFill = 'bg-stone-100/70 dark:bg-white/[0.04]';
+  const headerCellFill = 'bg-black/[0.045] dark:bg-white/[0.04]';
   const selectedCellFill = 'bg-[#2383E2]/10 dark:bg-[#2383E2]/20';
-  const gridBorderClass = 'border border-stone-200/90 dark:border-stone-700/70';
+  const gridBorderClass = 'border border-black/[0.16] dark:border-stone-700/70';
 
   return (
     <div
@@ -1185,7 +1185,7 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
               prev?.type === 'options' ? null : { type: 'options' }
             )
           }
-          className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+          className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium text-black/65 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-200 hover:bg-black/[0.06] dark:hover:bg-stone-800 transition-colors"
         >
           <SlidersHorizontal className="w-3 h-3" />
           <span>Options</span>
@@ -1412,7 +1412,7 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
               onClick={addColumn}
               aria-label="Add column"
               title="Add column"
-              className={`w-4 ml-1 shrink-0 ${gridBorderClass} bg-stone-100/50 dark:bg-white/[0.03] hover:bg-stone-100/90 dark:hover:bg-white/[0.07] text-stone-400 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 flex items-center justify-center opacity-0 hover:opacity-100 focus-visible:opacity-100 transition-all`}
+              className={`w-4 ml-1 shrink-0 ${gridBorderClass} bg-black/[0.03] dark:bg-white/[0.03] hover:bg-black/[0.07] dark:hover:bg-white/[0.07] text-black/50 hover:text-black/80 dark:text-stone-500 dark:hover:text-stone-300 flex items-center justify-center opacity-0 hover:opacity-100 focus-visible:opacity-100 transition-all`}
             >
               <Plus className="w-3 h-3" />
             </button>
@@ -1425,7 +1425,7 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
               onClick={addRow}
               aria-label="Add row"
               title="Add row"
-              className={`h-4 flex-1 min-w-0 ${gridBorderClass} bg-stone-100/50 dark:bg-white/[0.03] hover:bg-stone-100/90 dark:hover:bg-white/[0.07] text-stone-400 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 flex items-center justify-center opacity-0 hover:opacity-100 focus-visible:opacity-100 transition-all`}
+              className={`h-4 flex-1 min-w-0 ${gridBorderClass} bg-black/[0.03] dark:bg-white/[0.03] hover:bg-black/[0.07] dark:hover:bg-white/[0.07] text-black/50 hover:text-black/80 dark:text-stone-500 dark:hover:text-stone-300 flex items-center justify-center opacity-0 hover:opacity-100 focus-visible:opacity-100 transition-all`}
             >
               <Plus className="w-3 h-3" />
             </button>
@@ -1434,7 +1434,7 @@ export const TableBlock: React.FC<TableBlockProps> = ({ content, onChange }) => 
               onClick={addRowAndColumn}
               aria-label="Add row and column"
               title="Add row and column"
-              className={`w-4 h-4 ml-1 shrink-0 ${gridBorderClass} bg-stone-100/50 dark:bg-white/[0.03] hover:bg-stone-100/90 dark:hover:bg-white/[0.07] text-stone-400 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 flex items-center justify-center opacity-0 hover:opacity-100 focus-visible:opacity-100 transition-all`}
+              className={`w-4 h-4 ml-1 shrink-0 ${gridBorderClass} bg-black/[0.03] dark:bg-white/[0.03] hover:bg-black/[0.07] dark:hover:bg-white/[0.07] text-black/50 hover:text-black/80 dark:text-stone-500 dark:hover:text-stone-300 flex items-center justify-center opacity-0 hover:opacity-100 focus-visible:opacity-100 transition-all`}
             >
               <Plus className="w-3 h-3" />
             </button>

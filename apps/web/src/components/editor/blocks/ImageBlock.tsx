@@ -108,8 +108,8 @@ export const ImageBlock: React.FC<ImageBlockProps> = ({ content, onChange, onDel
           onDrop={handleDrop}
           className={`flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-2xl transition-all ${
             isDragging
-              ? 'border-stone-900 bg-stone-100/60 dark:border-stone-100 dark:bg-stone-800/40'
-              : 'border-stone-200 dark:border-stone-700 bg-stone-50/60 dark:bg-stone-800/40 hover:border-stone-300 dark:hover:border-stone-600'
+              ? 'border-stone-900 bg-black/[0.06] dark:border-stone-100 dark:bg-stone-800/40'
+              : 'border-black/[0.16] dark:border-stone-700 bg-black/[0.03] dark:bg-stone-800/40 hover:border-black/30 dark:hover:border-stone-600'
           }`}
         >
           <input
@@ -143,7 +143,7 @@ export const ImageBlock: React.FC<ImageBlockProps> = ({ content, onChange, onDel
                     browse
                   </button>
                 </p>
-                <p className="text-[11px] text-stone-400 dark:text-stone-500 mt-0.5">
+                <p className="text-[11px] text-black/55 dark:text-stone-500 mt-0.5">
                   PNG, JPG, GIF, WebP, SVG up to 10MB
                 </p>
               </div>
@@ -226,7 +226,7 @@ export const ImageBlock: React.FC<ImageBlockProps> = ({ content, onChange, onDel
           aria-label="Image caption"
           value={caption}
           onChange={(e) => onChange({ ...(content || {}), caption: e.target.value })}
-          className="w-full text-left text-xs text-stone-500 dark:text-stone-400 bg-transparent border-b border-transparent hover:border-stone-200 focus:border-stone-300 dark:focus:border-stone-600 focus:outline-none py-1 placeholder-stone-400 dark:placeholder-stone-500 transition-colors"
+          className="w-full text-left text-xs text-black/65 dark:text-stone-400 bg-transparent border-b border-transparent hover:border-black/20 focus:border-black/35 dark:hover:border-stone-700 dark:focus:border-stone-600 focus:outline-none py-1 placeholder:text-black/45 dark:placeholder:text-stone-500 transition-colors"
         />
       </div>
     </div>

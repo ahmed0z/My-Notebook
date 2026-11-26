@@ -94,25 +94,25 @@ export const BacklinksPanel: React.FC<BacklinksPanelProps> = ({
   }, [noteId]);
 
   return (
-    <div className={`mt-2 pt-2 border-t border-stone-200/60 dark:border-stone-800 ${className}`}>
+    <div className={`mt-2 pt-2 border-t border-black/10 dark:border-stone-800 ${className}`}>
       <button
         type="button"
         data-testid="backlinks-toggle"
         onClick={() => setIsExpanded((prev) => !prev)}
         aria-expanded={isExpanded}
-        className="flex items-center gap-2 cursor-pointer py-1 px-2 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 transition text-stone-600 dark:text-stone-300 text-xs font-medium select-none"
+        className="flex items-center gap-2 cursor-pointer py-1 px-2 rounded-lg hover:bg-black/[0.05] dark:hover:bg-stone-800 transition text-black/70 dark:text-stone-300 text-xs font-medium select-none"
       >
-        <Link2 className="w-3.5 h-3.5 text-stone-500 dark:text-stone-400" />
-        <span className="font-semibold uppercase tracking-wider text-[11px] text-stone-500 dark:text-stone-400">
+        <Link2 className="w-3.5 h-3.5 text-black/60 dark:text-stone-400" />
+        <span className="font-semibold uppercase tracking-wider text-[11px] text-black/60 dark:text-stone-400">
           Backlinks
         </span>
-        <span className="text-[10px] bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300 px-1.5 py-0.5 rounded-full font-semibold">
+        <span className="text-[10px] bg-black/[0.08] dark:bg-stone-700 text-stone-800 dark:text-stone-300 px-1.5 py-0.5 rounded-full font-semibold">
           {backlinks.length}
         </span>
         {isExpanded ? (
-          <ChevronDown className="w-3.5 h-3.5 text-stone-400" />
+          <ChevronDown className="w-3.5 h-3.5 text-black/50 dark:text-stone-400" />
         ) : (
-          <ChevronRight className="w-3.5 h-3.5 text-stone-400" />
+          <ChevronRight className="w-3.5 h-3.5 text-black/50 dark:text-stone-400" />
         )}
       </button>
 

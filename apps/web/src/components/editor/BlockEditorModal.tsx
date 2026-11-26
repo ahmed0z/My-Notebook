@@ -769,7 +769,7 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
   const dialogContent = (
     <>
       {/* Modal / Page Header */}
-      <div className="flex items-center justify-between p-4 sm:px-8 border-b border-stone-200/40 dark:border-stone-800/60 transition-colors shrink-0">
+      <div className="flex items-center justify-between p-4 sm:px-8 border-b border-black/[0.08] dark:border-stone-800/60 transition-colors shrink-0">
         <div className="flex items-center flex-1 min-w-0 mr-2">
           {/* Button to toggle master sidebar */}
           {onToggleMasterSidebar && (
@@ -779,7 +779,7 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
               title={isMasterSidebarOpen ? "Collapse sidebar (Ctrl+\\)" : "Expand sidebar (Ctrl+\\)"}
               aria-label={isMasterSidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
               className={`p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 transition mr-2 shrink-0 ${
-                isMasterSidebarOpen ? 'text-amber-600 dark:text-amber-400' : 'text-stone-500 dark:text-stone-400'
+                isMasterSidebarOpen ? 'text-amber-700 dark:text-amber-400' : 'text-black/65 dark:text-stone-400'
               }`}
             >
               <PanelLeft className="w-4 h-4" />
@@ -788,7 +788,7 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
 
           {/* Notion-style Breadcrumb in embedded mode */}
           {isEmbedded && (
-            <div className="flex items-center gap-1.5 text-xs text-stone-500 dark:text-stone-400 mr-2 shrink-0">
+            <div className="flex items-center gap-1.5 text-xs text-black/65 dark:text-stone-400 mr-2 shrink-0">
               <button
                 type="button"
                 onClick={onClose}
@@ -812,7 +812,7 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
             placeholder="Title"
             aria-label="Note title"
             onChange={(e) => handleTitleChange(e.target.value)}
-            className="text-xl sm:text-2xl font-bold bg-transparent border-none focus:outline-none w-full text-stone-900 dark:text-stone-100 placeholder-stone-400 dark:placeholder-stone-500"
+            className="text-xl sm:text-2xl font-bold bg-transparent border-none focus:outline-none w-full text-stone-900 dark:text-stone-100 placeholder:text-black/40 dark:placeholder:text-stone-500"
           />
         </div>
 
@@ -822,7 +822,7 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
             onClick={handlePinToggle}
             title={note.isPinned ? 'Unpin' : 'Pin note'}
             aria-label={note.isPinned ? 'Unpin' : 'Pin note'}
-            className={`p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 transition ${note.isPinned ? 'text-stone-900 dark:text-stone-100' : 'text-stone-400 dark:text-stone-500'}`}
+            className={`p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 transition ${note.isPinned ? 'text-stone-900 dark:text-stone-100' : 'text-black/50 dark:text-stone-500'}`}
           >
             <Pin className={`w-4 h-4 ${note.isPinned ? 'fill-stone-900 dark:fill-stone-100' : ''}`} />
           </button>
@@ -834,7 +834,7 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
               onClick={() => setShowColorPicker(!showColorPicker)}
               title="Color palette"
               aria-label="Change color"
-              className="p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-stone-500 dark:text-stone-400 transition"
+              className="p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-black/60 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100 transition"
             >
               <Palette className="w-4 h-4" />
             </button>
@@ -871,7 +871,7 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
             onClick={handleToggleFullscreen}
             title={isFullscreen ? 'Exit full screen' : 'Full screen'}
             aria-label={isFullscreen ? 'Exit full screen' : 'Full screen'}
-            className="p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 transition"
+            className="p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-black/60 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100 transition"
           >
             {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
@@ -882,7 +882,7 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
             onClick={onClose}
             title="Close"
             aria-label="Close"
-            className="p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 transition"
+            className="p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-black/60 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100 transition"
           >
             <X className="w-5 h-5" />
           </button>
@@ -906,7 +906,7 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
             }`}
           >
             {loading ? (
-              <div className="py-12 text-center text-xs text-stone-400 dark:text-stone-500">Loading blocks...</div>
+              <div className="py-12 text-center text-xs text-black/55 dark:text-stone-500">Loading blocks...</div>
             ) : (
               <div className="space-y-3" onDragLeave={handleContainerDragLeave}>
                 {blocks.map((block, idx) => {
@@ -1179,7 +1179,7 @@ export const BlockEditorModal: React.FC<BlockEditorModalProps> = ({
             }}
           >
               {blocks.length === 0 && !loading && (
-                <p className="text-stone-400 dark:text-stone-500 text-sm italic select-none">
+                <p className="text-black/45 dark:text-stone-500 text-sm italic select-none">
                   Click here or type '/' for commands...
                 </p>
               )}

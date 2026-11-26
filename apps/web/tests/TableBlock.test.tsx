@@ -152,8 +152,9 @@ describe('TableBlock (Notion Simple Table)', () => {
       const table = screen.getByRole('table');
       expect(table.style.width).toBe('300px');
       expect(table.style.minWidth).toBe('');
-      expect(container.querySelector('thead th')?.className).toContain('bg-stone-100/70');
-      expect(container.querySelectorAll('tbody td')[0]?.className).not.toContain('bg-stone-100/70');
+      expect(container.querySelector('thead th')?.className).toContain('bg-black/[0.045]');
+      expect(container.querySelectorAll('tbody td')[0]?.className).not.toContain('bg-black/[0.045]');
+      expect(container.querySelector('thead th')?.className).toContain('border-black/[0.16]');
 
       fireEvent.click(screen.getByRole('button', { name: /^options$/i }));
 
@@ -200,12 +201,12 @@ describe('TableBlock (Notion Simple Table)', () => {
       expect(table.style.minWidth).toBe('300px');
       // Header row off -> col 1 in thead no longer has header fill; col 0 still has it because hasHeaderColumn=true
       const ths = container.querySelectorAll('thead th');
-      expect(ths[0].className).toContain('bg-stone-100/70');
-      expect(ths[1].className).not.toContain('bg-stone-100/70');
+      expect(ths[0].className).toContain('bg-black/[0.045]');
+      expect(ths[1].className).not.toContain('bg-black/[0.045]');
       // Body col 0 has header fill, body col 1 does not; TableCell header typography matches thead col 0 cleanly
       const tds = container.querySelectorAll('tbody td');
-      expect(tds[0].className).toContain('bg-stone-100/70');
-      expect(tds[1].className).not.toContain('bg-stone-100/70');
+      expect(tds[0].className).toContain('bg-black/[0.045]');
+      expect(tds[1].className).not.toContain('bg-black/[0.045]');
 
       const th0Editable = ths[0].querySelector('[contenteditable="true"]')!;
       const td0Editable = tds[0].querySelector('[contenteditable="true"]')!;
@@ -1171,7 +1172,7 @@ describe('TableBlock (Notion Simple Table)', () => {
         const btn = screen.getByRole('button', { name: label });
         expect(btn.className).toContain('opacity-0');
         expect(btn.className).toContain('hover:opacity-100');
-        expect(btn.className).toContain('border-stone-200/90');
+        expect(btn.className).toContain('border-black/[0.16]');
         expect(btn.className).not.toContain('group-hover/table');
       }
 

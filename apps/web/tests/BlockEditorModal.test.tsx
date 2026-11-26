@@ -808,10 +808,10 @@ describe('BlockEditorModal', () => {
     const th1 = table.querySelector('th[data-col-index="1"]');
     const td0 = table.querySelector('td[data-row-index="0"][data-col-index="0"]');
     const td1 = table.querySelector('td[data-row-index="0"][data-col-index="1"]');
-    expect(th0).toHaveClass('bg-stone-100/70');
-    expect(th1).not.toHaveClass('bg-stone-100/70');
-    expect(td0).toHaveClass('bg-stone-100/70');
-    expect(td1).not.toHaveClass('bg-stone-100/70');
+    expect(th0).toHaveClass('bg-black/[0.045]');
+    expect(th1).not.toHaveClass('bg-black/[0.045]');
+    expect(td0).toHaveClass('bg-black/[0.045]');
+    expect(td1).not.toHaveClass('bg-black/[0.045]');
 
     // Edit cell (0, 1) and verify metadata persists in state and rendered DOM
     const editableCell = td1?.querySelector('[contenteditable="true"]') as HTMLElement;
@@ -831,8 +831,8 @@ describe('BlockEditorModal', () => {
 
     // Rendered DOM still keeps 240px width and header column styling after re-render
     expect(table.querySelectorAll('colgroup col')[0]).toHaveStyle({ width: '240px' });
-    expect(table.querySelector('th[data-col-index="1"]')).not.toHaveClass('bg-stone-100/70');
-    expect(table.querySelector('td[data-row-index="0"][data-col-index="0"]')).toHaveClass('bg-stone-100/70');
+    expect(table.querySelector('th[data-col-index="1"]')).not.toHaveClass('bg-black/[0.045]');
+    expect(table.querySelector('td[data-row-index="0"][data-col-index="0"]')).toHaveClass('bg-black/[0.045]');
   });
 
   it('preserves 1-row tables with rows: [] and creates blank headers when converting text to table', async () => {

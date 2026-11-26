@@ -86,9 +86,9 @@ export const ChecklistBlock: React.FC<ChecklistBlockProps> = ({ content, onChang
                 toggleItem(it.id);
               }
             }}
-            className="w-4 h-4 rounded-md border border-stone-400 dark:border-stone-500 bg-transparent flex items-center justify-center shrink-0 cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-stone-400 dark:focus:ring-stone-500"
+            className="w-4 h-4 rounded-md border border-black/40 dark:border-stone-500 bg-transparent flex items-center justify-center shrink-0 cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-black/40 dark:focus:ring-stone-500"
           >
-            {it.checked && <Check className="w-3 h-3 text-stone-700 dark:text-stone-300" strokeWidth={3} />}
+            {it.checked && <Check className="w-3 h-3 text-stone-900 dark:text-stone-300" strokeWidth={3} />}
           </button>
           <input
             ref={(el) => {
@@ -99,8 +99,8 @@ export const ChecklistBlock: React.FC<ChecklistBlockProps> = ({ content, onChang
             placeholder="To-do item..."
             onChange={(e) => updateItemText(it.id, e.target.value)}
             onKeyDown={(e) => handleKeyDown(e, idx, it)}
-            className={`flex-1 bg-transparent border-none focus:outline-none text-sm text-stone-800 dark:text-stone-100 placeholder-stone-400 dark:placeholder-stone-500 ${
-              it.checked ? 'line-through text-stone-400 dark:text-stone-500' : ''
+            className={`flex-1 bg-transparent border-none focus:outline-none text-sm text-stone-900 dark:text-stone-100 placeholder:text-black/45 dark:placeholder:text-stone-500 ${
+              it.checked ? 'line-through text-black/45 dark:text-stone-500' : ''
             }`}
           />
           <button
@@ -108,7 +108,7 @@ export const ChecklistBlock: React.FC<ChecklistBlockProps> = ({ content, onChang
             onClick={() => removeItem(it.id)}
             title="Delete item"
             aria-label="Delete item"
-            className="opacity-0 group-hover/item:opacity-100 p-1 rounded text-stone-400 dark:text-stone-500 hover:text-red-500 transition"
+            className="opacity-0 group-hover/item:opacity-100 p-1 rounded text-black/45 dark:text-stone-500 hover:text-red-600 dark:hover:text-red-400 transition"
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -119,7 +119,7 @@ export const ChecklistBlock: React.FC<ChecklistBlockProps> = ({ content, onChang
         type="button"
         onClick={addItem}
         aria-label="Add to-do item"
-        className="flex items-center gap-1.5 text-xs text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 pt-1 font-medium"
+        className="flex items-center gap-1.5 text-xs text-black/65 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 pt-1 font-medium"
       >
         <Plus className="w-3.5 h-3.5" />
         <span>Add to-do item</span>
